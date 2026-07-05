@@ -26,4 +26,8 @@ def is_duplicate(
 
 
 def title_similarity(left: str | None, right: str | None) -> float:
-    return SequenceMatcher(None, normalize_key(left), normalize_key(right)).ratio()
+    left_key = normalize_key(left)
+    right_key = normalize_key(right)
+    if not left_key or not right_key:
+        return 0.0
+    return SequenceMatcher(None, left_key, right_key).ratio()
