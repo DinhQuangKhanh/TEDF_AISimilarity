@@ -81,11 +81,16 @@ def calculate_similarity_for_new(db: Session, new_ids: list[int]) -> None:
     thesis_map = {thesis.thesis_id: thesis for thesis in all_theses}
     new_theses = [thesis_map[thesis_id] for thesis_id in new_ids if thesis_id in thesis_map]
 
+    seen: set[tuple[int, int]] = set()
     for new_thesis in new_theses:
         for other in all_theses:
             if new_thesis.thesis_id == other.thesis_id:
                 continue
             thesis_a_id, thesis_b_id = sorted([new_thesis.thesis_id, other.thesis_id])
+            pair = (thesis_a_id, thesis_b_id)
+            if pair in seen:
+                continue
+            seen.add(pair)
             exists = (
                 db.query(Similarity)
                 .filter(Similarity.thesis_a_id == thesis_a_id, Similarity.thesis_b_id == thesis_b_id)
