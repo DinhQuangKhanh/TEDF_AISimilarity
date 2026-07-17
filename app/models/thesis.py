@@ -8,17 +8,18 @@ from app.models.classification import thesis_domain, thesis_lexical, thesis_sema
 class Thesis(Base):
     __tablename__ = "thesis"
     __table_args__ = (
-        UniqueConstraint("title_en", "title_vn", "semester", "program", name="uq_thesis_full"),
+        UniqueConstraint("content_hash", name="uq_thesis_content_hash"),
     )
 
     thesis_id = Column(Integer, primary_key=True, index=True)
     semester = Column(String, nullable=True)
     program = Column(String, nullable=True)
-    title_en = Column(String, nullable=True)
-    title_vn = Column(String, nullable=True)
+    title = Column(String, nullable=True)
     description = Column(Text, nullable=True)
     scope = Column(Text, nullable=True)
-    notes = Column(Text, nullable=True)
+    objectives = Column(Text, nullable=True)
+    expected_result = Column(Text, nullable=True)
+    content_hash = Column(String, nullable=True)
     is_deleted = Column(Boolean, default=False, nullable=False)
     deleted_at = Column(DateTime, nullable=True)
     needs_review = Column(Boolean, default=False, nullable=False)
