@@ -37,10 +37,10 @@ def level_for(score: float) -> str:
 
 
 def calculate_scores(a: Thesis, b: Thesis) -> dict:
-    semantic_a = tokenize(" ".join(filter(None, [a.title_en, a.title_vn, a.description])))
-    semantic_b = tokenize(" ".join(filter(None, [b.title_en, b.title_vn, b.description])))
-    lexical_a = {t.name.lower() for t in a.lexical_tags} | tokenize(a.title_en) | tokenize(a.title_vn)
-    lexical_b = {t.name.lower() for t in b.lexical_tags} | tokenize(b.title_en) | tokenize(b.title_vn)
+    semantic_a = tokenize(" ".join(filter(None, [a.title, a.description, a.objectives, a.expected_result])))
+    semantic_b = tokenize(" ".join(filter(None, [b.title, b.description, b.objectives, b.expected_result])))
+    lexical_a = {t.name.lower() for t in a.lexical_tags} | tokenize(a.title)
+    lexical_b = {t.name.lower() for t in b.lexical_tags} | tokenize(b.title)
     structure_a = {s.name.lower() for s in a.structures} | tokenize(a.scope)
     structure_b = {s.name.lower() for s in b.structures} | tokenize(b.scope)
     domain_a = {d.name.lower() for d in a.domains} | {t.name.lower() for t in a.technologies}
