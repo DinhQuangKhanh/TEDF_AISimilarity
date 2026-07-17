@@ -9,6 +9,7 @@ from app.repositories.similarity_repository import SimilarityRepository
 from app.repositories.thesis_repository import ThesisRepository
 from app.schemas.import_schema import ApiResponse
 from app.schemas.thesis_schema import ThesisDetail, ThesisListItem
+from app.utils.score_calculator import action_for, is_structural_duplication
 
 router = APIRouter(prefix="/api/v1/theses", tags=["theses"])
 
@@ -68,6 +69,8 @@ def get_thesis_similarities(thesis_id: int, db: Session = Depends(get_db)):
                 "domain_score": row.domain_score,
                 "overall_score": row.overall_score,
                 "level": row.level,
+                "action": action_for(row.level),
+                "is_structural_duplication": is_structural_duplication(row.structure_score, row.domain_score),
                 "reason": json.loads(row.reason) if row.reason else [],
             }
         )
