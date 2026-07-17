@@ -6,11 +6,11 @@ from pydantic import BaseModel, Field
 class ThesisBase(BaseModel):
     semester: Optional[str] = None
     program: Optional[str] = None
-    title_en: Optional[str] = None
-    title_vn: Optional[str] = None
+    title: Optional[str] = None
     description: Optional[str] = None
     scope: Optional[str] = None
-    notes: Optional[str] = None
+    objectives: Optional[str] = None
+    expected_result: Optional[str] = None
 
 
 class ThesisCreate(ThesisBase):
