@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 import httpx
 
@@ -35,30 +34,32 @@ class LLMNormalizerService:
     def normalize(
         self,
         raw_row: dict,
-        semester: Optional[str] = None,
-        program: Optional[str] = None,
+        semester: str | None = None,
+        program: str | None = None,
     ) -> NormalizedRow:
         data = raw_row["data"]
-        title_en = clean_text(data.get("title_en"))
-        title_vn = clean_text(data.get("title_vn"))
+        title = clean_text(data.get("title"))
         description = clean_text(data.get("description"))
         scope = clean_text(data.get("scope"))
-        title = title_en or title_vn
-        notes = [f"Imported from sheet {raw_row['sheet_name']} row {raw_row['row_number']}"]
+        objectives = clean_text(data.get("objectives"))
+        expected_result = clean_text(data.get("expected_result"))
 
-        if not description and title:
-            description = self._generate_description(title_en=title_en, title_vn=title_vn)
-            notes.append("description_inferred_by_ai")
-
-        if not scope and title:
-            scope = self._generate_scope(title_en=title_en, title_vn=title_vn, description=description)
-            notes.append("scope_inferred_by_ai")
+        # Thiếu trường nội dung nào & có title -> để AI (hoặc heuristic) suy ra.
+        if title:
+            if not description:
+                description = self._generate_description(title)
+            if not scope:
+                scope = self._generate_scope(title, description)
+            if not objectives:
+                objectives = self._generate_objectives(title, description)
+            if not expected_result:
+                expected_result = self._generate_expected_result(title, description)
 
         domains = normalize_list([data.get("domains")] if data.get("domains") else [])
         technologies = normalize_list(
             [item.strip() for item in (data.get("technologies") or "").split(",") if item.strip()]
         )
-        lexical = normalize_list([*(title_en or "").split(), *(title_vn or "").split()])[:10]
+        lexical = normalize_list((title or "").split())[:10]
         semantic = normalize_list(domains or ["General"])
         structures = normalize_list(
             ["Web Application"]
@@ -69,27 +70,25 @@ class LLMNormalizerService:
         return NormalizedRow(
             semester=clean_text(data.get("semester")) or semester,
             program=clean_text(data.get("program")) or program,
-            title_en=title_en,
-            title_vn=title_vn,
+            title=title,
             description=description,
             scope=scope,
+            objectives=objectives,
+            expected_result=expected_result,
             domains=domains,
             semantic_categories=semantic,
             structure_types=structures,
             lexical_tags=lexical,
             technologies=technologies,
-            notes="; ".join(notes),
         )
 
-    def _generate_description(self, title_en: str | None, title_vn: str | None) -> str:
-        title = title_en or title_vn or "the thesis project"
+    def _generate_description(self, title: str) -> str:
         if OPENAI_API_KEY:
             try:
                 return _call_openai(
                     "Generate a concise thesis/project description from the title. "
                     "Return plain text only, no markdown, max 80 words.\n"
-                    f"English title: {title_en or ''}\n"
-                    f"Vietnamese title: {title_vn or ''}"
+                    f"Title: {title}"
                 )
             except Exception:
                 pass
@@ -98,20 +97,50 @@ class LLMNormalizerService:
             "covering the main user workflows, data management, and system evaluation."
         )
 
-    def _generate_scope(self, title_en: str | None, title_vn: str | None, description: str | None) -> str:
-        title = title_en or title_vn or "the thesis project"
+    def _generate_scope(self, title: str, description: str | None) -> str:
         if OPENAI_API_KEY:
             try:
                 return _call_openai(
                     "Generate a concise project scope from the title and description. "
                     "Return plain text only, no markdown, max 60 words.\n"
-                    f"English title: {title_en or ''}\n"
-                    f"Vietnamese title: {title_vn or ''}\n"
+                    f"Title: {title}\n"
                     f"Description: {description or ''}"
                 )
             except Exception:
                 pass
         return (
-            f"The scope includes requirement analysis, core feature implementation, testing, "
+            "The scope includes requirement analysis, core feature implementation, testing, "
             f"and deployment preparation for {title.lower()}."
+        )
+
+    def _generate_objectives(self, title: str, description: str | None) -> str:
+        if OPENAI_API_KEY:
+            try:
+                return _call_openai(
+                    "Generate concise objectives (2-4 short goals) for the thesis/project "
+                    "from the title and description. Return plain text only, no markdown, max 60 words.\n"
+                    f"Title: {title}\n"
+                    f"Description: {description or ''}"
+                )
+            except Exception:
+                pass
+        return (
+            f"The main objectives are to analyze requirements, build the core features of {title.lower()}, "
+            "and evaluate the system against the expected outcomes."
+        )
+
+    def _generate_expected_result(self, title: str, description: str | None) -> str:
+        if OPENAI_API_KEY:
+            try:
+                return _call_openai(
+                    "Generate the expected result/outcome for the thesis/project "
+                    "from the title and description. Return plain text only, no markdown, max 60 words.\n"
+                    f"Title: {title}\n"
+                    f"Description: {description or ''}"
+                )
+            except Exception:
+                pass
+        return (
+            f"The expected result is a working implementation of {title.lower()} that meets the defined "
+            "requirements and passes functional evaluation."
         )

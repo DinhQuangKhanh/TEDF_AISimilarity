@@ -9,7 +9,7 @@ from app.services.audit_service import AuditService
 from app.services.llm_normalizer_service import LLMNormalizerService
 from app.services.schema_mapper_service import SchemaMapperService
 from app.services.similarity_service import SimilarityService
-from app.utils.duplicate_checker import is_duplicate
+from app.utils.duplicate_checker import content_hash, is_duplicate
 
 
 class ThesisService:
@@ -45,31 +45,46 @@ class ThesisService:
                     normalized = self.normalizer.normalize(raw, semester, program)
                     self.audit.log("NORMALIZE_WITH_LLM", "thesis", None, f"Normalized row {raw['row_number']}")
                     thesis_data = self.mapper.map(normalized)
-                    if not thesis_data.title_en and not thesis_data.title_vn:
-                        raise ValueError("At least one title is required")
+                    if not thesis_data.title:
+                        raise ValueError("A title is required")
                     if is_duplicate(
                         self.db,
-                        thesis_data.title_en,
-                        thesis_data.title_vn,
+                        thesis_data.title,
+                        thesis_data.description,
+                        thesis_data.scope,
+                        thesis_data.objectives,
+                        thesis_data.expected_result,
                         thesis_data.semester,
                         thesis_data.program,
                     ):
                         self.audit.log("SKIP_DUPLICATE", "thesis", None, f"Duplicate row {raw['row_number']}")
                         continue
                     candidates = self.repo.find_near_duplicate_candidates(
-                        thesis_data.title_en,
-                        thesis_data.title_vn,
+                        thesis_data.title,
+                        thesis_data.description,
+                        thesis_data.scope,
+                        thesis_data.objectives,
+                        thesis_data.expected_result,
                         thesis_data.semester,
                         thesis_data.program,
                     )
                     thesis = Thesis(
                         semester=thesis_data.semester,
                         program=thesis_data.program,
-                        title_en=thesis_data.title_en,
-                        title_vn=thesis_data.title_vn,
+                        title=thesis_data.title,
                         description=thesis_data.description,
                         scope=thesis_data.scope,
-                        notes=thesis_data.notes,
+                        objectives=thesis_data.objectives,
+                        expected_result=thesis_data.expected_result,
+                        content_hash=content_hash(
+                            thesis_data.title,
+                            thesis_data.description,
+                            thesis_data.scope,
+                            thesis_data.objectives,
+                            thesis_data.expected_result,
+                            thesis_data.semester,
+                            thesis_data.program,
+                        ),
                         needs_review=bool(candidates),
                     )
                     self.repo.create(thesis)

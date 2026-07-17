@@ -5,10 +5,11 @@ import pandas as pd
 from app.utils.text_cleaner import clean_text, normalize_key
 
 HEADER_ALIASES = {
-    "title_en": ["title en", "english title", "project title", "title", "ten de tai en"],
-    "title_vn": ["title vn", "vietnamese title", "tên đề tài", "de tai", "ten de tai"],
+    "title": ["title", "title en", "english title", "project title", "tên đề tài", "ten de tai", "de tai"],
     "description": ["description", "summary", "mô tả", "mo ta"],
     "scope": ["scope", "phạm vi", "pham vi"],
+    "objectives": ["objective", "objectives", "mục tiêu", "muc tieu"],
+    "expected_result": ["expected result", "expected results", "expected output", "kết quả", "ket qua", "ket qua mong doi", "output"],
     "semester": ["semester", "học kỳ", "hoc ky"],
     "program": ["program", "ngành", "major", "chuong trinh"],
     "technologies": ["technology", "technologies", "tech stack", "công nghệ", "cong nghe"],
@@ -61,7 +62,7 @@ class ExcelReaderService:
                 raw = {key: value for key, value in raw.items() if value}
                 if not raw:
                     continue
-                if not raw.get("title_en") and not raw.get("title_vn"):
+                if not raw.get("title"):
                     continue
                 rows.append({"sheet_name": sheet_name, "row_number": row_number, "data": raw})
         return rows
