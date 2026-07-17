@@ -4,7 +4,7 @@ from app.utils.score_calculator import calculate_scores, level_for
 
 
 def build_thesis(title: str):
-    thesis = Thesis(title_en=title, description="demo", scope="web platform")
+    thesis = Thesis(title=title, description="demo", scope="web platform")
     thesis.domains = [Domain(name="E-commerce")]
     thesis.semantics = [SemanticCategory(name="Management System")]
     thesis.structures = [StructureType(name="Web Application")]

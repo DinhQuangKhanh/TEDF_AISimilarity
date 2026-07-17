@@ -17,8 +17,7 @@ class TestExcelReader:
         import pandas as pd
         from io import BytesIO
         df = pd.DataFrame({
-            "title_en": ["Project Alpha"],
-            "title_vn": ["Dự án Alpha"],
+            "title": ["Project Alpha"],
             "description": ["A system for X"],
             "semester": ["2025 Spring"],
             "program": ["Software Engineering"],
@@ -30,13 +29,13 @@ class TestExcelReader:
         service = ExcelReaderService()
         rows = service.parse(content)
         assert len(rows) == 1
-        assert rows[0]["data"]["title_en"] == "Project Alpha"
+        assert rows[0]["data"]["title"] == "Project Alpha"
 
     def test_skip_empty_rows(self):
         import pandas as pd
         from io import BytesIO
         df = pd.DataFrame({
-            "title_en": ["Project A", None, ""],
+            "title": ["Project A", None, ""],
         })
         buf = BytesIO()
         with pd.ExcelWriter(buf, engine="openpyxl") as writer:

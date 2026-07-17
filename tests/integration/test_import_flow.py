@@ -1,18 +1,11 @@
 import io
-import os
 
 import pandas as pd
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-os.environ["DATABASE_URL"] = "sqlite:///./test_api.sqlite"
-
-from app.database import Base
+import app.models  # noqa: F401 - đảm bảo mọi model được đăng ký với Base.metadata
+from app.database import Base, engine
 from app.main import app
-
-engine = create_engine("sqlite:///./test_api.sqlite", connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 client = TestClient(app)
 
@@ -20,9 +13,11 @@ client = TestClient(app)
 def make_excel_bytes():
     df = pd.DataFrame(
         {
-            "title_en": ["Project Alpha"],
-            "title_vn": ["Dự án Alpha"],
+            "title": ["Project Alpha"],
             "description": ["A test project"],
+            "scope": ["Web application"],
+            "objectives": ["Build the core features"],
+            "expected_result": ["A working system"],
             "semester": ["2025 Spring"],
             "program": ["Software Engineering"],
             "technologies": ["React, FastAPI, Postgres"],
