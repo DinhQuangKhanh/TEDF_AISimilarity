@@ -1,57 +1,71 @@
-# Thesis Dataset Import & Similarity API
+# TEDF — Thesis Topic Import & Similarity API
 
-FastAPI service để **import danh sách đề tài (thesis) từ Excel**, chuẩn hoá nội dung
-(có hỗ trợ AI), chống trùng lặp, và tính **độ tương đồng** giữa các đề tài. Dùng
-PostgreSQL + SQLAlchemy + Alembic.
+FastAPI service that **imports Software Engineering thesis topics from Excel**, normalizes
+their content (optionally with AI), detects duplication, and scores **multi-dimensional
+similarity** between topics. Backed by PostgreSQL + SQLAlchemy + Alembic.
 
-## Mô hình dữ liệu
+This repository is the **data-import and schema component** of the DASSF study
+(*Domain-Aware Multi-Dimensional Similarity for Detecting Structural Duplication in Software
+Engineering Thesis Topics*): it ingests the raw topic corpus into a relational schema and
+assembles the concatenated five-field representation used by the framework.
 
-Mỗi đề tài (`thesis`) có đúng **5 trường nội dung**:
+> **Scope note.** The similarity dimensions here are lightweight **token-based
+> approximations**. The full DASSF method (Sentence-BERT embeddings and the SEDO ontology with
+> Wu-Palmer / wpath measures) is **not implemented in this repository**. The MDDM fusion
+> weights, the four-level decision scale, and the structural-duplication rule **do** follow the
+> paper exactly.
 
-| Trường | Ý nghĩa |
-|--------|---------|
-| `title` | Tên đề tài |
-| `description` | Mô tả |
-| `scope` | Phạm vi |
-| `objectives` | Mục tiêu |
-| `expected_result` | Kết quả kỳ vọng |
+## Topic model
 
-Kèm `semester`, `program`, các phân loại nhiều-nhiều (domain, technology, semantic,
-structure, lexical) và `content_hash` (băm 5 trường + semester + program để chống trùng).
+Every thesis topic is a structured record of exactly **five content fields**:
 
-## Chạy bằng Docker (khuyên dùng)
+| Field | Meaning |
+|-------|---------|
+| `title` | Short name of the topic |
+| `description` | What the system does |
+| `scope` | Included modules and technologies |
+| `objectives` | Intended outcomes |
+| `expected_result` | Concrete deliverable |
+
+Plus `semester`, `program`, many-to-many classifications (domain, technology, semantic
+category, structure type, lexical tag), and `content_hash` (a hash of the five fields +
+semester + program, used for duplicate detection).
+
+## Run with Docker (recommended)
 
 ```bash
 docker compose up -d --build
 ```
 
-- `db`: PostgreSQL 15
-- `app`: FastAPI — khi khởi động tự chạy `alembic upgrade head` rồi bật uvicorn.
+- `db` — PostgreSQL 15
+- `app` — FastAPI; runs `alembic upgrade head` on startup, then uvicorn
 
-Mở API docs (Swagger): **http://localhost:8000/docs** (truy cập `http://localhost:8000/`
-sẽ tự chuyển hướng sang `/docs`).
+Open the API docs (Swagger UI): **http://localhost:8000/docs**
+(visiting `http://localhost:8000/` redirects there).
 
-### Biến môi trường (`.env`)
+### Environment variables (`.env`)
 
 ```env
 DATABASE_URL=postgresql+psycopg://postgres:password@db:5432/fastapi_db
-OPENAI_API_KEY=...        # tuỳ chọn — nếu có, AI sẽ suy ra trường còn thiếu
+OPENAI_API_KEY=...        # optional - if set, missing fields are inferred by AI
 MAX_UPLOAD_MB=50
 ```
 
-> `ALEMBIC_DATABASE_URL` (nếu đặt) dùng khi chạy Alembic từ **máy thật** (host).
-> Chạy Alembic trong container thì ghi đè rỗng để dùng `DATABASE_URL`:
-> `docker compose exec -e ALEMBIC_DATABASE_URL= app alembic upgrade head`
+> If `ALEMBIC_DATABASE_URL` is set, it is meant for running Alembic **from the host**. To run
+> Alembic **inside the container**, override it so `DATABASE_URL` is used:
+> ```bash
+> docker compose exec -e ALEMBIC_DATABASE_URL= app alembic upgrade head
+> ```
 
-## Import Excel
+## Importing an Excel file
 
-`POST /api/v1/import/excel` (multipart, field `file`). Hỗ trợ `.xlsx` và `.xls`.
+`POST /api/v1/import/excel` (multipart, field `file`). Supports `.xlsx` and `.xls`.
 
-Bộ đọc tự dò dòng tiêu đề (quét 10 dòng đầu) và map cột theo tên. Các cột nhận diện:
+The reader auto-detects the header row (scanning the first 10 rows) and maps columns by name:
 
-| Trường | Tên cột chấp nhận (một trong số) |
-|--------|-----------------------------------|
-| **title** (bắt buộc) | `title`, `title en`, `english title`, `project title`, `tên đề tài` |
+| Field | Accepted column names (any of) |
+|-------|--------------------------------|
+| **title** (required) | `title`, `title en`, `english title`, `project title`, `tên đề tài` |
 | description | `description`, `summary`, `mô tả` |
 | scope | `scope`, `phạm vi` |
 | objectives | `objective`, `objectives`, `mục tiêu` |
@@ -61,86 +75,125 @@ Bộ đọc tự dò dòng tiêu đề (quét 10 dòng đầu) và map cột the
 | technologies | `technology`, `technologies`, `tech stack`, `công nghệ` |
 | domains | `domain`, `field`, `lĩnh vực` |
 
-Dòng không có `title` sẽ bị bỏ qua. Nếu thiếu `description`/`scope`/`objectives`/
-`expected_result` mà có `title`, hệ thống tự sinh (OpenAI nếu có key, ngược lại dùng
-heuristic mặc định).
+Rows without a `title` are skipped. If `description`, `scope`, `objectives`, or
+`expected_result` is missing but a title is present, the value is generated (via OpenAI when
+`OPENAI_API_KEY` is set, otherwise a deterministic heuristic).
 
-Ví dụ bằng dòng lệnh:
+Example:
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/import/excel" \
   -F "file=@sample_thesis_import.xlsx"
 ```
 
-Kết quả thành công:
+Successful response:
 
 ```json
 { "success": true, "message": "Import completed",
   "data": { "inserted": 3, "new_ids": [1, 2, 3], "errors": [] } }
 ```
 
-## Chống trùng lặp
+## Duplicate detection
 
-Dựa trên **cả 5 trường nội dung** (title, description, scope, objectives,
-expected_result) + semester + program:
+Both checks read **all five content fields** plus `semester` and `program`:
 
-- **Trùng chính xác** → *bỏ qua* (không insert), ghi audit `SKIP_DUPLICATE`.
-  So khớp qua `content_hash` (băm 5 trường + semester + program, chuẩn hoá
-  hoa/thường & khoảng trắng). Ràng buộc DB `uq_thesis_content_hash` là lớp an toàn.
-- **Gần trùng** (độ giống tổ hợp 5 trường **≥ 0.85**, cùng semester+program) → *vẫn
-  insert* nhưng gắn cờ `needs_review = true`. Ngưỡng chỉnh tại
-  `app/repositories/thesis_repository.py`.
+- **Exact duplicate** → *skipped* (not inserted), audited as `SKIP_DUPLICATE`. Matched via
+  `content_hash` (SHA-256 over the normalized five fields + semester + program, so casing and
+  whitespace do not matter). The DB constraint `uq_thesis_content_hash` is the safety net.
+- **Near duplicate** (token Jaccard over the combined five fields **≥ 0.85**, within the same
+  semester and program) → *still inserted*, but flagged `needs_review = true`. The threshold
+  lives in `app/repositories/thesis_repository.py`.
 
-## Các endpoint chính
+## Similarity scoring (MDDM)
 
-| Method | Path | Chức năng |
-|--------|------|-----------|
-| POST | `/api/v1/import/excel` | Import Excel |
-| GET | `/api/v1/theses` | Danh sách (phân trang + lọc) |
-| GET | `/api/v1/theses/{id}` | Chi tiết + phân loại |
-| GET | `/api/v1/theses/{id}/similarities` | Các cặp tương đồng |
-| POST | `/api/v1/similarity/run-new` | Tính lại similarity thủ công |
+Each pair of topics is scored on four dimensions and fused into a composite score:
+
+```
+S_composite = 0.30·S_sem + 0.20·S_lex + 0.30·S_str + 0.20·S_dom
+```
+
+| Dimension | Paper technique | Implemented here | Fields read |
+|-----------|-----------------|------------------|-------------|
+| Semantic | SBERT cosine | token Jaccard | all five fields |
+| Lexical | TF-IDF Jaccard | **TF-IDF weighted Jaccard** (corpus IDF) | all five fields |
+| Structural | Wu-Palmer over SEDO | token Jaccard + technology/structure tags | scope + description |
+| Domain | wpath over SEDO | token Jaccard + domain tags | description + objectives |
+
+### Four-level decision scale
+
+| Level | Composite score | Recommended action |
+|-------|-----------------|--------------------|
+| Low | < 0.40 | Accept |
+| Moderate | 0.40 – 0.65 | Warn; committee reviews |
+| High | 0.65 – 0.85 | Require substantial revision |
+| Critical | ≥ 0.85 | Reject |
+
+### Structural duplication
+
+A pair is a **structural duplication** (same tech stack, different business domain) when:
+
+```
+S_str >= TAU_STR  and  S_dom < TAU_DOM
+```
+
+Defaults are `TAU_STR = 0.65` and `TAU_DOM = 0.40` in `app/utils/score_calculator.py`. The
+paper does not fix these numerically — tune them on a labeled set. The
+`/api/v1/theses/{id}/similarities` endpoint returns `level`, `action`, and
+`is_structural_duplication` for every pair, alongside the four per-dimension scores, so a
+committee can see *why* a pair was flagged.
+
+## Endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/api/v1/import/excel` | Import topics from Excel |
+| GET | `/api/v1/theses` | List topics (pagination + filters) |
+| GET | `/api/v1/theses/{id}` | Topic detail with classifications |
+| GET | `/api/v1/theses/{id}/similarities` | Similar pairs with scores and action |
+| POST | `/api/v1/similarity/run-new` | Recompute similarity on demand |
 | GET | `/health` | Health check |
 
-## Chạy tests
+## Running tests
 
 ```bash
-docker compose exec app pytest -q
+docker compose exec app python -m pytest -q
 ```
 
-Test dùng SQLite trong bộ nhớ (không cần Postgres).
+Tests run against SQLite, so no PostgreSQL instance is required.
 
-## Tool: học trọng số MDDM (`learn_mddm_weights.py`)
+## Tool: learning the MDDM weights
 
-Script **độc lập** (không nằm trong app, không được cài vào image) dùng để **học trọng
-số α/β/γ/δ** cho 4 kênh tương đồng (semantic, lexical, structure, domain) thay cho trọng
-số gán cứng trong `app/utils/score_calculator.py` (`WEIGHTS`).
+`tools/learn_mddm_weights.py` is a **standalone** script (not imported by the app and not
+installed into the Docker image) that learns the fusion weights α/β/γ/δ instead of hard-coding
+them, using the procedure described in the paper: fit a logistic-regression model on the four
+dimension scores, project its non-negative coefficients onto the simplex, and pick the
+F1-maximizing decision threshold. It also cross-checks that result against a constrained
+optimizer and a grid search.
 
-### Cài dependency (riêng, ngoài app)
+### Install its dependencies (separate from the app)
 
 ```bash
-pip install scikit-learn scipy pandas openpyxl
+pip install -r tools/requirements.txt
 ```
 
-### Chạy thử với dữ liệu giả lập
+### Try it on simulated data
 
 ```bash
-python learn_mddm_weights.py --demo
+python tools/learn_mddm_weights.py --demo
 ```
 
-### Chạy với dữ liệu thật
+### Run it on real scores
 
-File CSV/XLSX gồm 4 cột điểm tương đồng (đã chuẩn hoá [0,1]) + 1 cột nhãn 0/1:
+Provide a CSV/XLSX with the four dimension scores (normalized to `[0,1]`) and a binary label:
 
 ```
 pair_id, s_sem, s_lex, s_str, s_dom, label
 ```
 
 ```bash
-python learn_mddm_weights.py --input scored_pairs.xlsx \
+python tools/learn_mddm_weights.py --input scored_pairs.xlsx \
   --col-sem s_sem --col-lex s_lex --col-str s_str --col-dom s_dom --col-label label
 ```
 
-Script in ra bộ trọng số học được (Logistic Regression / Constrained optimize / Grid
-search) và ngưỡng `tau`. Áp kết quả bằng cách cập nhật `WEIGHTS` trong
-`app/utils/score_calculator.py`: `semantic=α, lexical=β, structure=γ, domain=δ`.
+To apply the learned weights, update `WEIGHTS` in `app/utils/score_calculator.py`
+(`semantic=α, lexical=β, structure=γ, domain=δ`).
