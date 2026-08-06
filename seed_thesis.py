@@ -12,6 +12,7 @@ Run once (uses ALEMBIC_DATABASE_URL / DATABASE_URL from .env, same as alembic):
     python seed_thesis.py
 """
 
+import json
 import os
 import uuid
 
@@ -19,7 +20,9 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.models.classification import Tech
 from app.models.thesis import Thesis
+from app.repositories.classification_repository import ClassificationRepository
 from app.services.similarity_service import SimilarityService
 
 # Web project-id formulas, mirrored from LoadTestDataSeeder.cs verbatim.
@@ -32,6 +35,28 @@ def project_id(i: int) -> uuid.UUID:
 
 def real_project_id(i: int) -> uuid.UUID:
     return uuid.UUID(f"61000000-0000-0000-0000-{i:012d}")
+
+
+def _split_tech(value: str | None) -> list[str]:
+    return [t.strip() for t in (value or "").split(",") if t.strip()]
+
+
+# Full content (English title + 5 fields) for enriched topics, keyed by a semester-unique code:
+#   Spring -> "SP_01".."SP_40"  (data/capstone_SP26.json),
+#   Summer -> "SU_01".."SU_13"  (data/capstone_SU26.json, ordered to match the web Summer groups).
+# Fall 2025 stays title-only. Extend by editing the capstone_*.json files.
+_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+
+
+def _load_enriched() -> dict[str, dict]:
+    merged: dict[str, dict] = {}
+    for fname in ("capstone_SP26.json", "capstone_SU26.json"):
+        with open(os.path.join(_DATA_DIR, fname), encoding="utf-8") as f:
+            merged.update(json.load(f))
+    return merged
+
+
+ENRICHED: dict[str, dict] = _load_enriched()
 
 
 FALL_2025 = [
@@ -148,13 +173,13 @@ SUMMER_2026 = [
 
 
 def _rows():
-    """Yields (thesis_id, semester, english_title) with ids matching the web projects."""
+    """Yields (thesis_id, semester, enrich_key, fallback_title) with ids matching web projects."""
     for i, title in enumerate(FALL_2025):
-        yield project_id(i + 1), "Fall 2025", title
+        yield project_id(i + 1), "Fall 2025", None, title
     for i, title in enumerate(SPRING_2026):
-        yield project_id(FALL25_GROUP_COUNT + i + 1), "Spring 2026", title
+        yield project_id(FALL25_GROUP_COUNT + i + 1), "Spring 2026", f"SP_{i + 1:02d}", title
     for g, title in enumerate(SUMMER_2026):
-        yield real_project_id(g + 1), "Summer 2026", title
+        yield real_project_id(g + 1), "Summer 2026", f"SU_{g + 1:02d}", title
 
 
 def main() -> None:
@@ -165,15 +190,35 @@ def main() -> None:
 
     engine = create_engine(db_url)
     session = sessionmaker(bind=engine)()
+    classifications = ClassificationRepository(session)
     try:
         existing = {row[0] for row in session.query(Thesis.thesis_id).all()}
         new_ids: list[uuid.UUID] = []
-        for thesis_id, semester, title in _rows():
+        enriched_count = 0
+        for thesis_id, semester, key, fallback_title in _rows():
             if thesis_id in existing:
                 continue
-            session.add(
-                Thesis(thesis_id=thesis_id, semester=semester, program="SE", title=title)
-            )
+
+            detail = ENRICHED.get(key) if key else None
+            if detail:
+                thesis = Thesis(
+                    thesis_id=thesis_id,
+                    semester=semester,
+                    program="SE",
+                    title=detail["titleEn"],
+                    description=detail.get("description"),
+                    scope=detail.get("scope"),
+                    objectives=detail.get("objective"),
+                    expected_result=detail.get("expectedResult"),
+                )
+                # Attach the tech stack as Tech tags so the structural/tech-stack dimension scores.
+                for name in _split_tech(detail.get("technology")):
+                    thesis.technologies.append(classifications.get_or_create(Tech, name))
+                enriched_count += 1
+            else:
+                thesis = Thesis(thesis_id=thesis_id, semester=semester, program="SE", title=fallback_title)
+
+            session.add(thesis)
             new_ids.append(thesis_id)
 
         session.flush()
@@ -181,7 +226,10 @@ def main() -> None:
             # Pre-compute pairwise similarity so the first "check duplicates" is instant.
             SimilarityService(session).run_for_new(new_ids)
         session.commit()
-        print(f"Seeded {len(new_ids)} theses (skipped {len(existing)} existing); similarity computed.")
+        print(
+            f"Seeded {len(new_ids)} theses (skipped {len(existing)} existing); "
+            f"{enriched_count} with full content; similarity computed."
+        )
     finally:
         session.close()
 
