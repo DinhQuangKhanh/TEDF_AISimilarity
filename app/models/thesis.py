@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, UniqueConstraint, func
+import uuid
+
+from sqlalchemy import Boolean, Column, DateTime, String, Text, UniqueConstraint, Uuid, func
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -11,7 +13,9 @@ class Thesis(Base):
         UniqueConstraint("content_hash", name="uq_thesis_content_hash"),
     )
 
-    thesis_id = Column(Integer, primary_key=True, index=True)
+    # Client-supplied UUID: for topics created via the API this equals the web system's
+    # project id, so a project and its thesis share one id. Excel imports fall back to uuid4.
+    thesis_id = Column(Uuid(as_uuid=True), primary_key=True, index=True, default=uuid.uuid4)
     semester = Column(String, nullable=True)
     program = Column(String, nullable=True)
     title = Column(String, nullable=True)

@@ -1,3 +1,4 @@
+import uuid
 from typing import Optional
 
 from sqlalchemy import or_
@@ -56,7 +57,7 @@ class ThesisRepository:
             query = query.join(Thesis.technologies).filter_by(name=technology)
         return query.order_by(Thesis.thesis_id.desc()).offset((page - 1) * page_size).limit(page_size).all()
 
-    def get_detail(self, thesis_id: int) -> Optional[Thesis]:
+    def get_detail(self, thesis_id: uuid.UUID) -> Optional[Thesis]:
         return (
             self.db.query(Thesis)
             .options(

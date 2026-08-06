@@ -10,5 +10,6 @@ class AuditLog(Base):
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
     action = Column(String, nullable=False)
     table_name = Column(String, nullable=False)
-    record_id = Column(Integer, nullable=True)
+    # String so it can hold a thesis UUID (theses are now uuid-keyed) or any other record key.
+    record_id = Column(String, nullable=True)
     detail = Column(Text, nullable=True)

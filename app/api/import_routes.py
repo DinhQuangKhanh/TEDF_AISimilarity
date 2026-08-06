@@ -7,6 +7,7 @@ from app.core.config import ALLOWED_EXTENSIONS, MAX_UPLOAD_MB
 from app.database import get_db
 from app.schemas.import_schema import ApiResponse
 from app.services.excel_reader_service import ExcelReaderService
+from app.services.similarity_service import SimilarityService
 from app.services.thesis_service import ThesisService
 
 router = APIRouter(prefix="/api/v1/import", tags=["import"])
@@ -33,4 +34,14 @@ async def import_excel(
     if not rows:
         raise HTTPException(status_code=400, detail={"success": False, "message": "Validation failed", "errors": ["No valid data found in Excel file"]})
     new_ids, errors = ThesisService(db).import_rows(rows, semester, program)
-    return ApiResponse(success=True, message="Import completed", data={"inserted": len(new_ids), "new_ids": new_ids, "errors": errors})
+    similarities = SimilarityService(db).results_for(new_ids) if new_ids else []
+    return ApiResponse(
+        success=True,
+        message="Import completed",
+        data={
+            "inserted": len(new_ids),
+            "new_ids": new_ids,
+            "errors": errors,
+            "similarities": similarities,
+        },
+    )

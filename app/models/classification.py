@@ -1,4 +1,4 @@
-from sqlalchemy import Column, ForeignKey, Integer, String, Table, UniqueConstraint
+from sqlalchemy import Column, ForeignKey, Integer, String, Table, UniqueConstraint, Uuid
 from sqlalchemy.orm import relationship
 
 from app.database import Base
@@ -6,35 +6,35 @@ from app.database import Base
 thesis_domain = Table(
     "thesis_domain",
     Base.metadata,
-    Column("thesis_id", Integer, ForeignKey("thesis.thesis_id"), primary_key=True),
+    Column("thesis_id", Uuid(as_uuid=True), ForeignKey("thesis.thesis_id"), primary_key=True),
     Column("domain_id", Integer, ForeignKey("domain.domain_id"), primary_key=True),
 )
 
 thesis_semantic = Table(
     "thesis_semantic",
     Base.metadata,
-    Column("thesis_id", Integer, ForeignKey("thesis.thesis_id"), primary_key=True),
+    Column("thesis_id", Uuid(as_uuid=True), ForeignKey("thesis.thesis_id"), primary_key=True),
     Column("semantic_id", Integer, ForeignKey("semantic_category.semantic_id"), primary_key=True),
 )
 
 thesis_structure = Table(
     "thesis_structure",
     Base.metadata,
-    Column("thesis_id", Integer, ForeignKey("thesis.thesis_id"), primary_key=True),
+    Column("thesis_id", Uuid(as_uuid=True), ForeignKey("thesis.thesis_id"), primary_key=True),
     Column("structure_id", Integer, ForeignKey("structure_type.structure_id"), primary_key=True),
 )
 
 thesis_lexical = Table(
     "thesis_lexical",
     Base.metadata,
-    Column("thesis_id", Integer, ForeignKey("thesis.thesis_id"), primary_key=True),
+    Column("thesis_id", Uuid(as_uuid=True), ForeignKey("thesis.thesis_id"), primary_key=True),
     Column("tag_id", Integer, ForeignKey("lexical_tag.tag_id"), primary_key=True),
 )
 
 thesis_tech = Table(
     "thesis_tech",
     Base.metadata,
-    Column("thesis_id", Integer, ForeignKey("thesis.thesis_id"), primary_key=True),
+    Column("thesis_id", Uuid(as_uuid=True), ForeignKey("thesis.thesis_id"), primary_key=True),
     Column("tech_id", Integer, ForeignKey("tech.tech_id"), primary_key=True),
 )
 
