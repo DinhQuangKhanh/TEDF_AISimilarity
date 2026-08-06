@@ -55,7 +55,9 @@ class LLMNormalizerService:
             if not expected_result:
                 expected_result = self._generate_expected_result(title, description)
 
-        domains = normalize_list([data.get("domains")] if data.get("domains") else [])
+        domains = normalize_list(
+            [item.strip() for item in (data.get("domains") or "").split(",") if item.strip()]
+        )
         technologies = normalize_list(
             [item.strip() for item in (data.get("technologies") or "").split(",") if item.strip()]
         )

@@ -1,11 +1,18 @@
 import json
 import math
+import uuid
 
 from sqlalchemy.orm import Session
 
+from app.core.config import SEDO_FALLBACK_TOKENS, WPATH_K
 from app.models.similarity import Similarity
 from app.models.thesis import Thesis
+from app.ontology.sedo import get_sedo
 from app.utils.text_cleaner import tokenize
+
+# Which ontology layers each dimension consults (paper Sect. 3.4).
+_STRUCT_LAYERS = {"TechnicalStack", "Methodology", "TaskType"}
+_DOMAIN_LAYERS = {"DomainEntity"}
 
 # MDDM fusion weights (DASSF paper, Eq. 1): alpha=0.30, beta=0.20, gamma=0.30, delta=0.20.
 WEIGHTS = {
@@ -19,6 +26,9 @@ WEIGHTS = {
 # The paper does not fix these numerically; tune them on a labeled set.
 TAU_STR = 0.65
 TAU_DOM = 0.40
+
+# A dimension is only quoted as a reason once it carries real signal.
+REASON_THRESHOLD = 0.50
 
 # Four-level decision scale (paper Table 3).
 _ACTIONS = {
@@ -89,57 +99,92 @@ def action_for(level: str) -> str:
     return _ACTIONS.get(level, "")
 
 
-def is_structural_duplication(structure_score: float, domain_score: float) -> bool:
-    """Same tech stack, different business domain (paper Sect. 3.5)."""
-    return structure_score >= TAU_STR and domain_score < TAU_DOM
-
-
-def calculate_scores(a: Thesis, b: Thesis, idf: dict[str, float] | None = None) -> dict:
-    # Semantic and lexical both read all five fields (paper Table 2); they differ in weighting.
-    content_a = tokenize(_content_text(a))
-    content_b = tokenize(_content_text(b))
-
-    # Structural = tech stack + methodology, read from scope + description.
-    structure_a = (
-        {item.name.lower() for item in a.structures}
-        | {item.name.lower() for item in a.technologies}
-        | tokenize(a.scope)
-        | tokenize(a.description)
-    )
-    structure_b = (
-        {item.name.lower() for item in b.structures}
-        | {item.name.lower() for item in b.technologies}
-        | tokenize(b.scope)
-        | tokenize(b.description)
-    )
-
-    # Domain = business domain, read from description + objectives.
-    domain_a = {item.name.lower() for item in a.domains} | tokenize(a.description) | tokenize(a.objectives)
-    domain_b = {item.name.lower() for item in b.domains} | tokenize(b.description) | tokenize(b.objectives)
-
-    semantic = clamp(jaccard(content_a, content_b))
-    lexical = clamp(weighted_jaccard(content_a, content_b, idf))
-    structure = clamp(jaccard(structure_a, structure_b))
-    domain = clamp(jaccard(domain_a, domain_b))
-    overall = clamp(
+def composite_score(semantic: float, lexical: float, structure: float, domain: float) -> float:
+    """MDDM weighted fusion (paper Eq. 1)."""
+    return clamp(
         semantic * WEIGHTS["semantic"]
         + lexical * WEIGHTS["lexical"]
         + structure * WEIGHTS["structure"]
         + domain * WEIGHTS["domain"]
     )
+
+
+def is_structural_duplication(structure_score: float, domain_score: float) -> bool:
+    """Same tech stack, different business domain (paper Sect. 3.5)."""
+    return structure_score >= TAU_STR and domain_score < TAU_DOM
+
+
+def _join(*parts) -> str:
+    return " ".join(part for part in parts if part)
+
+
+def _ontology_dimension(sedo, text_a, text_b, layers, measure, fallback_a, fallback_b) -> float:
+    """SEDO-grounded similarity for one dimension.
+
+    When the ontology recognizes nothing on this dimension, the score drops
+    (paper Sect. 5.5); with SEDO_FALLBACK_TOKENS it falls back to token Jaccard.
+    """
+    concepts_a = {c for c in sedo.recognize(text_a) if sedo.nodes[c]["layer"] in layers}
+    concepts_b = {c for c in sedo.recognize(text_b) if sedo.nodes[c]["layer"] in layers}
+    similarity = sedo.set_similarity(concepts_a, concepts_b, measure)
+    if similarity is None:
+        return jaccard(fallback_a, fallback_b) if SEDO_FALLBACK_TOKENS else 0.0
+    return similarity
+
+
+def calculate_scores(a: Thesis, b: Thesis, idf: dict[str, float] | None = None) -> dict:
+    sedo = get_sedo()
+
+    # Semantic and lexical both read all five fields (paper Table 2); they differ in weighting.
+    content_a = tokenize(_content_text(a))
+    content_b = tokenize(_content_text(b))
+
+    # Structural = tech stack + methodology, read from scope + description (+ tech/structure tags).
+    struct_text_a = _join(a.scope, a.description, *(t.name for t in a.technologies), *(s.name for s in a.structures))
+    struct_text_b = _join(b.scope, b.description, *(t.name for t in b.technologies), *(s.name for s in b.structures))
+    struct_tokens_a = tokenize(struct_text_a)
+    struct_tokens_b = tokenize(struct_text_b)
+
+    # Domain = business domain, read from description + objectives (+ domain tags).
+    domain_text_a = _join(a.description, a.objectives, *(d.name for d in a.domains))
+    domain_text_b = _join(b.description, b.objectives, *(d.name for d in b.domains))
+    domain_tokens_a = tokenize(domain_text_a)
+    domain_tokens_b = tokenize(domain_text_b)
+
+    semantic = clamp(jaccard(content_a, content_b))
+    lexical = clamp(weighted_jaccard(content_a, content_b, idf))
+    structure = clamp(
+        _ontology_dimension(
+            sedo, struct_text_a, struct_text_b, _STRUCT_LAYERS, sedo.wu_palmer, struct_tokens_a, struct_tokens_b
+        )
+    )
+    domain = clamp(
+        _ontology_dimension(
+            sedo,
+            domain_text_a,
+            domain_text_b,
+            _DOMAIN_LAYERS,
+            lambda c1, c2: sedo.wpath(c1, c2, WPATH_K),
+            domain_tokens_a,
+            domain_tokens_b,
+        )
+    )
+    overall = composite_score(semantic, lexical, structure, domain)
     level = level_for(overall)
     structural_dup = is_structural_duplication(structure, domain)
 
+    # Only report a dimension that actually carries signal, so the explanation
+    # stays consistent (a structural duplication must not also read "same domain").
     reasons = []
     if structural_dup:
         reasons.append("same tech stack with a different business domain")
-    if domain > 0:
+    elif domain >= REASON_THRESHOLD:
         reasons.append("same business domain")
-    if structure > 0:
+    if structure >= REASON_THRESHOLD:
         reasons.append("similar architecture or scope")
-    if lexical > 0:
+    if lexical >= REASON_THRESHOLD:
         reasons.append("shared weighted terms across fields")
-    if semantic > 0:
+    if semantic >= REASON_THRESHOLD:
         reasons.append("similar semantic content")
     return {
         "semantic_score": semantic,
@@ -154,7 +199,7 @@ def calculate_scores(a: Thesis, b: Thesis, idf: dict[str, float] | None = None) 
     }
 
 
-def calculate_similarity_for_new(db: Session, new_ids: list[int]) -> None:
+def calculate_similarity_for_new(db: Session, new_ids: list[uuid.UUID]) -> None:
     all_theses = db.query(Thesis).filter(Thesis.is_deleted.is_(False)).all()
     thesis_map = {thesis.thesis_id: thesis for thesis in all_theses}
     new_theses = [thesis_map[thesis_id] for thesis_id in new_ids if thesis_id in thesis_map]
@@ -162,7 +207,7 @@ def calculate_similarity_for_new(db: Session, new_ids: list[int]) -> None:
     # IDF is corpus-level, so build it once per run.
     idf = build_idf(all_theses)
 
-    seen: set[tuple[int, int]] = set()
+    seen: set[tuple[uuid.UUID, uuid.UUID]] = set()
     for new_thesis in new_theses:
         for other in all_theses:
             if new_thesis.thesis_id == other.thesis_id:
