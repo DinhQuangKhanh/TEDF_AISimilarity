@@ -11,3 +11,4 @@ MAX_PAGE_SIZE = 100
 SEDO_FALLBACK_TOKENS = (
     os.getenv("SEDO_FALLBACK_TOKENS", "true").lower() == "true"
 )
+WPATH_K = float(os.getenv("WPATH_K", "1.0"))
