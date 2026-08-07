@@ -8,3 +8,6 @@ MAX_UPLOAD_MB = int(os.getenv("MAX_UPLOAD_MB", "50"))
 ALLOWED_EXTENSIONS = {".xlsx", ".xls"}
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
+SEDO_FALLBACK_TOKENS = (
+    os.getenv("SEDO_FALLBACK_TOKENS", "true").lower() == "true"
+)
