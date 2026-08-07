@@ -16,3 +16,4 @@ MAX_PAGE_SIZE = 100
 SEDO_FALLBACK_TOKENS = os.getenv("SEDO_FALLBACK_TOKENS", "false").lower() == "true"
 # wpath k parameter (Zhu-Iglesias). Tune to match the paper's setup.
 WPATH_K = float(os.getenv("WPATH_K", "0.8"))
+
