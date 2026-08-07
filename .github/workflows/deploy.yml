@@ -43,7 +43,7 @@ jobs:
           port: ${{ secrets.SERVER_PORT }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script: |
-            cd /home/tedf/tedf-ai-similarity
+            cd /home/tedf/ai-similarity
 
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login \
               -u "${{ secrets.DOCKERHUB_USERNAME }}" \
