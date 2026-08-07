@@ -1,0 +1,1031 @@
+{
+  "_meta": {
+    "status": "DRAFT - AI-drafted placeholder; the author MUST replace it with the real SEDO ontology.",
+    "description": "Software Engineering Domain Ontology (SEDO), 4-layer hierarchy for DASSF.",
+    "paper_targets": {
+      "concepts": 74,
+      "parent_classes": 18,
+      "keywords": 238
+    },
+    "counts": {
+      "concepts": 74,
+      "parent_classes": 18,
+      "keywords": 238,
+      "tech_leaves": 27,
+      "domain_leaves": 37,
+      "methods_tasks": 10
+    },
+    "relations_note": "Only isA (parent) is used by the similarity measures; usesWith/requires are reserved for future use."
+  },
+  "concepts": [
+    {
+      "id": "thing",
+      "name": "Thing",
+      "layer": "root",
+      "parent": null,
+      "keywords": []
+    },
+    {
+      "id": "technical_stack",
+      "name": "Technical Stack",
+      "layer": "TechnicalStack",
+      "parent": "thing",
+      "keywords": []
+    },
+    {
+      "id": "domain_entity",
+      "name": "Domain Entity",
+      "layer": "DomainEntity",
+      "parent": "thing",
+      "keywords": []
+    },
+    {
+      "id": "methodology",
+      "name": "Methodology",
+      "layer": "Methodology",
+      "parent": "thing",
+      "keywords": []
+    },
+    {
+      "id": "task_type",
+      "name": "Task Type",
+      "layer": "TaskType",
+      "parent": "thing",
+      "keywords": []
+    },
+    {
+      "id": "frontend",
+      "name": "Frontend",
+      "layer": "TechnicalStack",
+      "parent": "technical_stack",
+      "keywords": [
+        "frontend"
+      ]
+    },
+    {
+      "id": "react",
+      "name": "React",
+      "layer": "TechnicalStack",
+      "parent": "frontend",
+      "keywords": [
+        "react",
+        "reactjs",
+        "react.js",
+        "react system"
+      ]
+    },
+    {
+      "id": "angular",
+      "name": "Angular",
+      "layer": "TechnicalStack",
+      "parent": "frontend",
+      "keywords": [
+        "angular",
+        "angularjs",
+        "angular system"
+      ]
+    },
+    {
+      "id": "vue",
+      "name": "Vue",
+      "layer": "TechnicalStack",
+      "parent": "frontend",
+      "keywords": [
+        "vue",
+        "vuejs",
+        "vue.js",
+        "vue system"
+      ]
+    },
+    {
+      "id": "svelte",
+      "name": "Svelte",
+      "layer": "TechnicalStack",
+      "parent": "frontend",
+      "keywords": [
+        "svelte",
+        "sveltekit",
+        "svelte system"
+      ]
+    },
+    {
+      "id": "blazor",
+      "name": "Blazor",
+      "layer": "TechnicalStack",
+      "parent": "frontend",
+      "keywords": [
+        "blazor",
+        "blazor webassembly",
+        "blazor system"
+      ]
+    },
+    {
+      "id": "backend",
+      "name": "Backend",
+      "layer": "TechnicalStack",
+      "parent": "technical_stack",
+      "keywords": [
+        "backend"
+      ]
+    },
+    {
+      "id": "nodejs",
+      "name": "Node.js",
+      "layer": "TechnicalStack",
+      "parent": "backend",
+      "keywords": [
+        "node.js",
+        "nodejs",
+        "express",
+        "nestjs",
+        "node.js system"
+      ]
+    },
+    {
+      "id": "django",
+      "name": "Django",
+      "layer": "TechnicalStack",
+      "parent": "backend",
+      "keywords": [
+        "django",
+        "django rest",
+        "django system"
+      ]
+    },
+    {
+      "id": "spring_boot",
+      "name": "Spring Boot",
+      "layer": "TechnicalStack",
+      "parent": "backend",
+      "keywords": [
+        "spring boot",
+        "spring",
+        "java spring",
+        "spring boot system"
+      ]
+    },
+    {
+      "id": "aspnet_core",
+      "name": "ASP.NET Core",
+      "layer": "TechnicalStack",
+      "parent": "backend",
+      "keywords": [
+        "asp.net core",
+        "asp.net",
+        "dotnet core",
+        "asp.net core system"
+      ]
+    },
+    {
+      "id": "laravel",
+      "name": "Laravel",
+      "layer": "TechnicalStack",
+      "parent": "backend",
+      "keywords": [
+        "laravel",
+        "php laravel",
+        "laravel system"
+      ]
+    },
+    {
+      "id": "flask",
+      "name": "Flask",
+      "layer": "TechnicalStack",
+      "parent": "backend",
+      "keywords": [
+        "flask",
+        "python flask",
+        "flask system"
+      ]
+    },
+    {
+      "id": "database",
+      "name": "Database",
+      "layer": "TechnicalStack",
+      "parent": "technical_stack",
+      "keywords": [
+        "database"
+      ]
+    },
+    {
+      "id": "postgresql",
+      "name": "PostgreSQL",
+      "layer": "TechnicalStack",
+      "parent": "database",
+      "keywords": [
+        "postgresql",
+        "postgres",
+        "psql",
+        "postgresql system"
+      ]
+    },
+    {
+      "id": "mysql",
+      "name": "MySQL",
+      "layer": "TechnicalStack",
+      "parent": "database",
+      "keywords": [
+        "mysql",
+        "mariadb",
+        "mysql system"
+      ]
+    },
+    {
+      "id": "mongodb",
+      "name": "MongoDB",
+      "layer": "TechnicalStack",
+      "parent": "database",
+      "keywords": [
+        "mongodb",
+        "mongo",
+        "nosql",
+        "mongodb system"
+      ]
+    },
+    {
+      "id": "sql_server",
+      "name": "SQL Server",
+      "layer": "TechnicalStack",
+      "parent": "database",
+      "keywords": [
+        "sql server",
+        "mssql",
+        "sqlserver",
+        "sql server system"
+      ]
+    },
+    {
+      "id": "redis",
+      "name": "Redis",
+      "layer": "TechnicalStack",
+      "parent": "database",
+      "keywords": [
+        "redis",
+        "redis cache",
+        "redis system"
+      ]
+    },
+    {
+      "id": "mobile",
+      "name": "Mobile",
+      "layer": "TechnicalStack",
+      "parent": "technical_stack",
+      "keywords": [
+        "mobile"
+      ]
+    },
+    {
+      "id": "flutter",
+      "name": "Flutter",
+      "layer": "TechnicalStack",
+      "parent": "mobile",
+      "keywords": [
+        "flutter",
+        "dart flutter"
+      ]
+    },
+    {
+      "id": "react_native",
+      "name": "React Native",
+      "layer": "TechnicalStack",
+      "parent": "mobile",
+      "keywords": [
+        "react native",
+        "rn mobile"
+      ]
+    },
+    {
+      "id": "android",
+      "name": "Android",
+      "layer": "TechnicalStack",
+      "parent": "mobile",
+      "keywords": [
+        "android",
+        "kotlin",
+        "android app"
+      ]
+    },
+    {
+      "id": "ios",
+      "name": "iOS",
+      "layer": "TechnicalStack",
+      "parent": "mobile",
+      "keywords": [
+        "ios",
+        "swift",
+        "iphone app"
+      ]
+    },
+    {
+      "id": "devops",
+      "name": "DevOps",
+      "layer": "TechnicalStack",
+      "parent": "technical_stack",
+      "keywords": [
+        "devops"
+      ]
+    },
+    {
+      "id": "docker",
+      "name": "Docker",
+      "layer": "TechnicalStack",
+      "parent": "devops",
+      "keywords": [
+        "docker",
+        "container",
+        "dockerize"
+      ]
+    },
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes",
+      "layer": "TechnicalStack",
+      "parent": "devops",
+      "keywords": [
+        "kubernetes",
+        "k8s"
+      ]
+    },
+    {
+      "id": "jenkins",
+      "name": "Jenkins",
+      "layer": "TechnicalStack",
+      "parent": "devops",
+      "keywords": [
+        "jenkins",
+        "ci/cd",
+        "pipeline"
+      ]
+    },
+    {
+      "id": "aws",
+      "name": "AWS",
+      "layer": "TechnicalStack",
+      "parent": "devops",
+      "keywords": [
+        "aws",
+        "amazon web services",
+        "cloud"
+      ]
+    },
+    {
+      "id": "integration",
+      "name": "Integration",
+      "layer": "TechnicalStack",
+      "parent": "technical_stack",
+      "keywords": [
+        "integration"
+      ]
+    },
+    {
+      "id": "rest_api",
+      "name": "REST API",
+      "layer": "TechnicalStack",
+      "parent": "integration",
+      "keywords": [
+        "rest api",
+        "rest",
+        "restful",
+        "web api"
+      ]
+    },
+    {
+      "id": "graphql",
+      "name": "GraphQL",
+      "layer": "TechnicalStack",
+      "parent": "integration",
+      "keywords": [
+        "graphql",
+        "graph ql"
+      ]
+    },
+    {
+      "id": "grpc",
+      "name": "gRPC",
+      "layer": "TechnicalStack",
+      "parent": "integration",
+      "keywords": [
+        "grpc",
+        "grpc protocol"
+      ]
+    },
+    {
+      "id": "hospitality",
+      "name": "Hospitality",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "hospitality"
+      ]
+    },
+    {
+      "id": "hotel",
+      "name": "Hotel",
+      "layer": "DomainEntity",
+      "parent": "hospitality",
+      "keywords": [
+        "hotel",
+        "hotel management",
+        "lodging"
+      ]
+    },
+    {
+      "id": "restaurant",
+      "name": "Restaurant",
+      "layer": "DomainEntity",
+      "parent": "hospitality",
+      "keywords": [
+        "restaurant",
+        "restaurant management",
+        "dining"
+      ]
+    },
+    {
+      "id": "homestay",
+      "name": "Homestay",
+      "layer": "DomainEntity",
+      "parent": "hospitality",
+      "keywords": [
+        "homestay",
+        "guest house"
+      ]
+    },
+    {
+      "id": "healthcare",
+      "name": "Healthcare",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "healthcare"
+      ]
+    },
+    {
+      "id": "hospital",
+      "name": "Hospital",
+      "layer": "DomainEntity",
+      "parent": "healthcare",
+      "keywords": [
+        "hospital",
+        "hospital management"
+      ]
+    },
+    {
+      "id": "clinic",
+      "name": "Clinic",
+      "layer": "DomainEntity",
+      "parent": "healthcare",
+      "keywords": [
+        "clinic",
+        "clinic management",
+        "outpatient"
+      ]
+    },
+    {
+      "id": "pharmacy",
+      "name": "Pharmacy",
+      "layer": "DomainEntity",
+      "parent": "healthcare",
+      "keywords": [
+        "pharmacy",
+        "drugstore",
+        "medicine store"
+      ]
+    },
+    {
+      "id": "laboratory",
+      "name": "Laboratory",
+      "layer": "DomainEntity",
+      "parent": "healthcare",
+      "keywords": [
+        "laboratory",
+        "lab",
+        "diagnostics"
+      ]
+    },
+    {
+      "id": "education",
+      "name": "Education",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "education"
+      ]
+    },
+    {
+      "id": "school",
+      "name": "School",
+      "layer": "DomainEntity",
+      "parent": "education",
+      "keywords": [
+        "school",
+        "school management",
+        "k12"
+      ]
+    },
+    {
+      "id": "university",
+      "name": "University",
+      "layer": "DomainEntity",
+      "parent": "education",
+      "keywords": [
+        "university",
+        "campus",
+        "higher education"
+      ]
+    },
+    {
+      "id": "course",
+      "name": "Course",
+      "layer": "DomainEntity",
+      "parent": "education",
+      "keywords": [
+        "course",
+        "e-learning",
+        "lms"
+      ]
+    },
+    {
+      "id": "library",
+      "name": "Library",
+      "layer": "DomainEntity",
+      "parent": "education",
+      "keywords": [
+        "library",
+        "book borrowing",
+        "catalog"
+      ]
+    },
+    {
+      "id": "retail",
+      "name": "Retail",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "retail"
+      ]
+    },
+    {
+      "id": "store",
+      "name": "Store",
+      "layer": "DomainEntity",
+      "parent": "retail",
+      "keywords": [
+        "store",
+        "shop",
+        "retail store"
+      ]
+    },
+    {
+      "id": "marketplace",
+      "name": "Marketplace",
+      "layer": "DomainEntity",
+      "parent": "retail",
+      "keywords": [
+        "marketplace",
+        "e-commerce",
+        "online market"
+      ]
+    },
+    {
+      "id": "inventory",
+      "name": "Inventory",
+      "layer": "DomainEntity",
+      "parent": "retail",
+      "keywords": [
+        "inventory",
+        "stock management",
+        "warehouse stock"
+      ]
+    },
+    {
+      "id": "product_catalog",
+      "name": "Product Catalog",
+      "layer": "DomainEntity",
+      "parent": "retail",
+      "keywords": [
+        "product catalog",
+        "catalogue",
+        "product listing"
+      ]
+    },
+    {
+      "id": "finance",
+      "name": "Finance",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "finance"
+      ]
+    },
+    {
+      "id": "bank",
+      "name": "Bank",
+      "layer": "DomainEntity",
+      "parent": "finance",
+      "keywords": [
+        "bank",
+        "banking",
+        "core banking"
+      ]
+    },
+    {
+      "id": "wallet",
+      "name": "Wallet",
+      "layer": "DomainEntity",
+      "parent": "finance",
+      "keywords": [
+        "wallet",
+        "e-wallet",
+        "payment wallet"
+      ]
+    },
+    {
+      "id": "loan",
+      "name": "Loan",
+      "layer": "DomainEntity",
+      "parent": "finance",
+      "keywords": [
+        "loan",
+        "lending",
+        "credit"
+      ]
+    },
+    {
+      "id": "transportation",
+      "name": "Transportation",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "transportation"
+      ]
+    },
+    {
+      "id": "parking",
+      "name": "Parking",
+      "layer": "DomainEntity",
+      "parent": "transportation",
+      "keywords": [
+        "parking",
+        "parking lot",
+        "car park"
+      ]
+    },
+    {
+      "id": "ride_hailing",
+      "name": "Ride-hailing",
+      "layer": "DomainEntity",
+      "parent": "transportation",
+      "keywords": [
+        "ride-hailing",
+        "ride sharing",
+        "taxi booking"
+      ]
+    },
+    {
+      "id": "bicycle_rental",
+      "name": "Bicycle Rental",
+      "layer": "DomainEntity",
+      "parent": "transportation",
+      "keywords": [
+        "bicycle rental",
+        "bike rental",
+        "bike sharing"
+      ]
+    },
+    {
+      "id": "realestate",
+      "name": "RealEstate",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "realestate"
+      ]
+    },
+    {
+      "id": "apartment",
+      "name": "Apartment",
+      "layer": "DomainEntity",
+      "parent": "realestate",
+      "keywords": [
+        "apartment",
+        "apartment management",
+        "condo"
+      ]
+    },
+    {
+      "id": "property_listing",
+      "name": "Property Listing",
+      "layer": "DomainEntity",
+      "parent": "realestate",
+      "keywords": [
+        "property listing",
+        "real estate listing",
+        "property portal"
+      ]
+    },
+    {
+      "id": "humanresources",
+      "name": "HumanResources",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "humanresources"
+      ]
+    },
+    {
+      "id": "employee",
+      "name": "Employee",
+      "layer": "DomainEntity",
+      "parent": "humanresources",
+      "keywords": [
+        "employee",
+        "staff",
+        "employee management"
+      ]
+    },
+    {
+      "id": "recruitment",
+      "name": "Recruitment",
+      "layer": "DomainEntity",
+      "parent": "humanresources",
+      "keywords": [
+        "recruitment",
+        "hiring",
+        "applicant tracking"
+      ]
+    },
+    {
+      "id": "payroll",
+      "name": "Payroll",
+      "layer": "DomainEntity",
+      "parent": "humanresources",
+      "keywords": [
+        "payroll",
+        "salary",
+        "wage"
+      ]
+    },
+    {
+      "id": "government",
+      "name": "Government",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "government"
+      ]
+    },
+    {
+      "id": "citizen",
+      "name": "Citizen",
+      "layer": "DomainEntity",
+      "parent": "government",
+      "keywords": [
+        "citizen",
+        "resident",
+        "civil"
+      ]
+    },
+    {
+      "id": "license",
+      "name": "License",
+      "layer": "DomainEntity",
+      "parent": "government",
+      "keywords": [
+        "license",
+        "licensing",
+        "certificate"
+      ]
+    },
+    {
+      "id": "permit",
+      "name": "Permit",
+      "layer": "DomainEntity",
+      "parent": "government",
+      "keywords": [
+        "permit",
+        "permit management",
+        "approval"
+      ]
+    },
+    {
+      "id": "entertainment",
+      "name": "Entertainment",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "entertainment"
+      ]
+    },
+    {
+      "id": "movie",
+      "name": "Movie",
+      "layer": "DomainEntity",
+      "parent": "entertainment",
+      "keywords": [
+        "movie",
+        "cinema",
+        "film"
+      ]
+    },
+    {
+      "id": "event",
+      "name": "Event",
+      "layer": "DomainEntity",
+      "parent": "entertainment",
+      "keywords": [
+        "event",
+        "event management",
+        "conference"
+      ]
+    },
+    {
+      "id": "ticket",
+      "name": "Ticket",
+      "layer": "DomainEntity",
+      "parent": "entertainment",
+      "keywords": [
+        "ticket",
+        "ticketing",
+        "booking ticket"
+      ]
+    },
+    {
+      "id": "agriculture",
+      "name": "Agriculture",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "agriculture"
+      ]
+    },
+    {
+      "id": "farm",
+      "name": "Farm",
+      "layer": "DomainEntity",
+      "parent": "agriculture",
+      "keywords": [
+        "farm",
+        "farming",
+        "farm management"
+      ]
+    },
+    {
+      "id": "crop",
+      "name": "Crop",
+      "layer": "DomainEntity",
+      "parent": "agriculture",
+      "keywords": [
+        "crop",
+        "crop management",
+        "harvest"
+      ]
+    },
+    {
+      "id": "logistics",
+      "name": "Logistics",
+      "layer": "DomainEntity",
+      "parent": "domain_entity",
+      "keywords": [
+        "logistics"
+      ]
+    },
+    {
+      "id": "warehouse",
+      "name": "Warehouse",
+      "layer": "DomainEntity",
+      "parent": "logistics",
+      "keywords": [
+        "warehouse",
+        "depot",
+        "storage"
+      ]
+    },
+    {
+      "id": "shipment",
+      "name": "Shipment",
+      "layer": "DomainEntity",
+      "parent": "logistics",
+      "keywords": [
+        "shipment",
+        "freight",
+        "cargo"
+      ]
+    },
+    {
+      "id": "delivery",
+      "name": "Delivery",
+      "layer": "DomainEntity",
+      "parent": "logistics",
+      "keywords": [
+        "delivery",
+        "last mile",
+        "courier"
+      ]
+    },
+    {
+      "id": "agile",
+      "name": "Agile",
+      "layer": "Methodology",
+      "parent": "methodology",
+      "keywords": [
+        "agile",
+        "agile method"
+      ]
+    },
+    {
+      "id": "scrum",
+      "name": "Scrum",
+      "layer": "Methodology",
+      "parent": "methodology",
+      "keywords": [
+        "scrum",
+        "sprint"
+      ]
+    },
+    {
+      "id": "waterfall",
+      "name": "Waterfall",
+      "layer": "Methodology",
+      "parent": "methodology",
+      "keywords": [
+        "waterfall",
+        "waterfall model"
+      ]
+    },
+    {
+      "id": "kanban",
+      "name": "Kanban",
+      "layer": "Methodology",
+      "parent": "methodology",
+      "keywords": [
+        "kanban",
+        "kanban board"
+      ]
+    },
+    {
+      "id": "tdd",
+      "name": "TDD",
+      "layer": "Methodology",
+      "parent": "methodology",
+      "keywords": [
+        "tdd",
+        "test driven"
+      ]
+    },
+    {
+      "id": "crud_management",
+      "name": "CRUD Management",
+      "layer": "TaskType",
+      "parent": "task_type",
+      "keywords": [
+        "crud management",
+        "crud",
+        "management system"
+      ]
+    },
+    {
+      "id": "booking",
+      "name": "Booking",
+      "layer": "TaskType",
+      "parent": "task_type",
+      "keywords": [
+        "booking",
+        "reservation",
+        "appointment"
+      ]
+    },
+    {
+      "id": "recommendation",
+      "name": "Recommendation",
+      "layer": "TaskType",
+      "parent": "task_type",
+      "keywords": [
+        "recommendation",
+        "recommender",
+        "suggestion"
+      ]
+    },
+    {
+      "id": "analytics",
+      "name": "Analytics",
+      "layer": "TaskType",
+      "parent": "task_type",
+      "keywords": [
+        "analytics",
+        "reporting",
+        "dashboard"
+      ]
+    },
+    {
+      "id": "authentication",
+      "name": "Authentication",
+      "layer": "TaskType",
+      "parent": "task_type",
+      "keywords": [
+        "authentication",
+        "login",
+        "auth"
+      ]
+    }
+  ]
+}

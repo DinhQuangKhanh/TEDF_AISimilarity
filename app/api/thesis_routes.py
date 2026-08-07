@@ -10,7 +10,10 @@ from app.schemas.import_schema import ApiResponse
 from app.schemas.thesis_schema import ThesisCreateRequest, ThesisDetail, ThesisListItem
 from app.services.similarity_service import SimilarityService
 from app.services.thesis_service import ThesisService
-from app.services.translation_service import translate_to_vietnamese
+
+# TODO: re-enable together with the /translate endpoint below once
+# app/services/translation_service.py exists.
+# from app.services.translation_service import translate_to_vietnamese
 
 router = APIRouter(prefix="/api/v1/theses", tags=["theses"])
 
@@ -95,33 +98,37 @@ def get_thesis_similarities(thesis_id: UUID, db: Session = Depends(get_db)):
     return ApiResponse(success=True, message="Similarity results fetched", data={"items": items})
 
 
-@router.get("/{thesis_id}/translate", response_model=ApiResponse)
-def translate_thesis(thesis_id: UUID, db: Session = Depends(get_db)):
-    """Returns the topic's content translated to Vietnamese for the side-by-side comparison view."""
-    thesis = ThesisRepository(db).get_detail(thesis_id)
-    if not thesis:
-        raise HTTPException(status_code=404, detail={"success": False, "message": "Not found", "errors": ["Thesis not found"]})
-
-    translated = translate_to_vietnamese(
-        {
-            "title": thesis.title,
-            "description": thesis.description,
-            "scope": thesis.scope,
-            "objectives": thesis.objectives,
-            "expected_result": thesis.expected_result,
-        }
-    )
-    return ApiResponse(
-        success=True,
-        message="Translation completed",
-        data={
-            "thesis_id": str(thesis.thesis_id),
-            "title": translated["title"],
-            "description": translated["description"],
-            "scope": translated["scope"],
-            "objectives": translated["objectives"],
-            "expected_result": translated["expected_result"],
-            "technologies": [item.name for item in thesis.technologies],
-            "translated": translated["translated"],
-        },
-    )
+# TEMPORARILY DISABLED: app/services/translation_service.py does not exist yet, and the
+# missing import crashed the whole app at startup. Restore this block (and the import
+# above) once translate_to_vietnamese is implemented.
+#
+# @router.get("/{thesis_id}/translate", response_model=ApiResponse)
+# def translate_thesis(thesis_id: UUID, db: Session = Depends(get_db)):
+#     """Returns the topic's content translated to Vietnamese for the side-by-side comparison view."""
+#     thesis = ThesisRepository(db).get_detail(thesis_id)
+#     if not thesis:
+#         raise HTTPException(status_code=404, detail={"success": False, "message": "Not found", "errors": ["Thesis not found"]})
+#
+#     translated = translate_to_vietnamese(
+#         {
+#             "title": thesis.title,
+#             "description": thesis.description,
+#             "scope": thesis.scope,
+#             "objectives": thesis.objectives,
+#             "expected_result": thesis.expected_result,
+#         }
+#     )
+#     return ApiResponse(
+#         success=True,
+#         message="Translation completed",
+#         data={
+#             "thesis_id": str(thesis.thesis_id),
+#             "title": translated["title"],
+#             "description": translated["description"],
+#             "scope": translated["scope"],
+#             "objectives": translated["objectives"],
+#             "expected_result": translated["expected_result"],
+#             "technologies": [item.name for item in thesis.technologies],
+#             "translated": translated["translated"],
+#         },
+#     )
