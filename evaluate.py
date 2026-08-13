@@ -173,6 +173,44 @@ def ranking_metrics(queries, matrix, weights):
     }
 
 
+def level_metrics(queries, matrix, weights) -> dict:
+    """Paper's primary task (Table III): does our duplication LEVEL for the (query, gold-duplicate)
+    pair match the level implied by the teacher's ``duplicationResult``? Both sides use the same
+    Table III thresholds (0.40 / 0.65 / 0.85), so this is a like-for-like level comparison and
+    sidesteps the noisy Top-1 ranking. Also reports the binary duplicate task (positive = High/Critical)."""
+    gold_levels, pred_levels, our_scores, gold_dup = [], [], [], []
+    for q in queries:
+        if q["target_idx"] is None or q["gold_score"] is None:
+            continue
+        gold_score = float(q["gold_score"])
+        our_score = _overall(matrix[q["_row"]][q["target_idx"]], weights)
+        gold_levels.append(sc.level_for(gold_score))
+        pred_levels.append(sc.level_for(our_score))
+        our_scores.append(our_score)
+        gold_dup.append(gold_score >= 0.65)  # High/Critical = "duplicate" (paper §VII)
+
+    n = len(gold_levels)
+    if n == 0:
+        return {}
+    exact = sum(1 for g, p in zip(gold_levels, pred_levels) if g == p) / n
+    adjacent = sum(1 for g, p in zip(gold_levels, pred_levels)
+                   if abs(_LEVELS.index(g) - _LEVELS.index(p)) <= 1) / n
+    pred_dup = [s >= 0.65 for s in our_scores]
+    binary = _binary_prf(gold_dup, pred_dup)
+    return {
+        "n": n,
+        "level_accuracy": round(exact, 4),
+        "adjacent_accuracy": round(adjacent, 4),
+        "macro_f1": round(_macro_f1(gold_levels, pred_levels), 4),
+        "binary_precision": round(binary["precision"], 4),
+        "binary_recall": round(binary["recall"], 4),
+        "binary_f1": round(binary["f1"], 4),
+        "auc": _r(_auc(our_scores, gold_dup)),
+        "gold_level_dist": _dist(gold_levels),
+        "confusion": _confusion(gold_levels, pred_levels),
+    }
+
+
 # ── tiny stats helpers (avoid extra deps) ───────────────────────────────────────────
 def _mae(a, b):
     return sum(abs(x - y) for x, y in zip(a, b)) / len(a) if a else None
@@ -203,6 +241,57 @@ def _ranks(values):
     return ranks
 
 
+# ── level-classification helpers (paper Table III / Table IV) ───────────────────────
+_LEVELS = ["Low", "Moderate", "High", "Critical"]
+
+
+def _macro_f1(gold: list[str], pred: list[str]) -> float:
+    """Macro-averaged F1 over the levels that actually appear in the gold labels."""
+    labels = sorted(set(gold), key=_LEVELS.index)
+    f1s = []
+    for lab in labels:
+        tp = sum(1 for g, p in zip(gold, pred) if g == lab and p == lab)
+        fp = sum(1 for g, p in zip(gold, pred) if g != lab and p == lab)
+        fn = sum(1 for g, p in zip(gold, pred) if g == lab and p != lab)
+        prec = tp / (tp + fp) if (tp + fp) else 0.0
+        rec = tp / (tp + fn) if (tp + fn) else 0.0
+        f1s.append(2 * prec * rec / (prec + rec) if (prec + rec) else 0.0)
+    return sum(f1s) / len(f1s) if f1s else 0.0
+
+
+def _binary_prf(labels: list[bool], preds: list[bool]) -> dict:
+    tp = sum(1 for l, p in zip(labels, preds) if l and p)
+    fp = sum(1 for l, p in zip(labels, preds) if (not l) and p)
+    fn = sum(1 for l, p in zip(labels, preds) if l and (not p))
+    prec = tp / (tp + fp) if (tp + fp) else 0.0
+    rec = tp / (tp + fn) if (tp + fn) else 0.0
+    f1 = 2 * prec * rec / (prec + rec) if (prec + rec) else 0.0
+    return {"precision": prec, "recall": rec, "f1": f1}
+
+
+def _auc(scores: list[float], labels: list[bool]) -> float | None:
+    """AUC of the binary duplicate/non-duplicate projection (rank-based Mann-Whitney)."""
+    pos = [s for s, l in zip(scores, labels) if l]
+    neg = [s for s, l in zip(scores, labels) if not l]
+    if not pos or not neg:
+        return None
+    wins = sum((1.0 if p > n else 0.5 if p == n else 0.0) for p in pos for n in neg)
+    return wins / (len(pos) * len(neg))
+
+
+def _confusion(gold: list[str], pred: list[str]) -> dict:
+    present = sorted(set(gold) | set(pred), key=_LEVELS.index)
+    return {g: {p: sum(1 for gg, pp in zip(gold, pred) if gg == g and pp == p) for p in present} for g in present}
+
+
+def _dist(levels: list[str]) -> dict:
+    return {lab: levels.count(lab) for lab in sorted(set(levels), key=_LEVELS.index)}
+
+
+def _r(x):
+    return round(x, 4) if isinstance(x, (int, float)) else x
+
+
 # ── weight grid search over the simplex (step 0.05) ─────────────────────────────────
 def simplex(step_pct=5):
     steps = 100 // step_pct
@@ -214,27 +303,29 @@ def simplex(step_pct=5):
 
 
 def tune_weights(queries, matrix):
+    """Grid-search the simplex for the weights that best reproduce the teacher's LEVELS
+    (paper's primary task): maximize level macro-F1, tie-break by AUC then level accuracy."""
     best, best_key = None, None
     for w in simplex(5):
-        m = ranking_metrics(queries, matrix, w)
-        # maximize Top-1, then Top-3, then Top-5, then minimize score MAE.
-        key = (m["top1"], m["top3"], m["top5"], -(m["score_mae"] or 1.0))
+        m = level_metrics(queries, matrix, w)
+        key = (m["macro_f1"], m["auc"] or 0.0, m["level_accuracy"])
         if best_key is None or key > best_key:
-            best_key, best = key, (w, m)
+            best_key, best = key, w
     return best
 
 
 def ablation(queries, matrix):
-    """Drop each dimension from the default weights (renormalize) and re-score (paper Table V)."""
-    base = ranking_metrics(queries, matrix, _DEFAULT_WEIGHTS)["top1"]
+    """Drop each dimension from the default weights (renormalize) and re-score the level
+    macro-F1 — the direct analogue of the paper's per-dimension ablation (Table V)."""
+    base = level_metrics(queries, matrix, _DEFAULT_WEIGHTS)["macro_f1"]
     rows = {}
     for i, name in enumerate(_DIMS):
         w = list(_DEFAULT_WEIGHTS)
         w[i] = 0.0
         total = sum(w)
         w = tuple(x / total for x in w) if total else tuple(w)
-        top1 = ranking_metrics(queries, matrix, w)["top1"]
-        rows[name] = {"top1": round(top1, 4), "delta_vs_full": round(top1 - base, 4)}
+        f1 = level_metrics(queries, matrix, w)["macro_f1"]
+        rows[name] = {"macro_f1": round(f1, 4), "delta_vs_full": round(f1 - base, 4)}
     return base, rows
 
 
@@ -267,22 +358,26 @@ def main() -> None:
     idf = sc.build_idf(corpus)
     matrix = dims_matrix(queries, corpus, idf)
 
-    default_metrics = ranking_metrics(queries, matrix, _DEFAULT_WEIGHTS)
-    best_weights, tuned_metrics = tune_weights(queries, matrix)
-    base_top1, ablation_rows = ablation(queries, matrix)
+    default_rank = ranking_metrics(queries, matrix, _DEFAULT_WEIGHTS)
+    default_level = level_metrics(queries, matrix, _DEFAULT_WEIGHTS)
+    best_weights = tune_weights(queries, matrix)
+    tuned_rank = ranking_metrics(queries, matrix, best_weights)
+    tuned_level = level_metrics(queries, matrix, best_weights)
+    base_f1, ablation_rows = ablation(queries, matrix)
 
     report = {
         "semantic_backend": backend_name(),
         "corpus_size": len(corpus),
         "queries_total": len(queries),
-        "queries_resolved": default_metrics["n_resolved"],
+        "queries_resolved": default_rank["n_resolved"],
         "sedo_coverage": {
             "corpus": sedo_coverage(corpus),
             "queries": sedo_coverage([q["_thesis"] for q in queries]),
         },
-        "default_weights": {"weights": _DEFAULT_WEIGHTS, "metrics": _round(default_metrics)},
-        "tuned_weights": {"weights": best_weights, "metrics": _round(tuned_metrics)},
-        "ablation_from_default": {"full_top1": round(base_top1, 4), "drop": ablation_rows},
+        "default_weights": {"weights": _DEFAULT_WEIGHTS, "level": default_level, "ranking": _round(default_rank)},
+        "tuned_weights": {"weights": best_weights, "tuned_for": "level macro-F1",
+                          "level": tuned_level, "ranking": _round(tuned_rank)},
+        "ablation_from_default": {"full_macro_f1": round(base_f1, 4), "drop": ablation_rows},
     }
     with open(_REPORT_FILE, "w", encoding="utf-8") as handle:
         json.dump(report, handle, indent=2, ensure_ascii=False)
@@ -295,7 +390,7 @@ def _round(metrics: dict) -> dict:
 
 
 def _print_digest(r: dict) -> None:
-    print("=" * 68)
+    print("=" * 74)
     print(f"DASSF evaluation  ·  semantic backend = {r['semantic_backend']}")
     print(f"corpus={r['corpus_size']} topics · queries={r['queries_total']} "
           f"(resolved to a gold target: {r['queries_resolved']})")
@@ -303,20 +398,30 @@ def _print_digest(r: dict) -> None:
     print(f"SEDO coverage  corpus: tech {cov['corpus']['tech_or_method']:.0%} / "
           f"domain {cov['corpus']['domain']:.0%}   |   "
           f"queries: tech {cov['queries']['tech_or_method']:.0%} / domain {cov['queries']['domain']:.0%}")
-    print("-" * 68)
-    dm, tm = r["default_weights"]["metrics"], r["tuned_weights"]["metrics"]
-    print(f"{'':22}{'Top-1':>8}{'Top-3':>8}{'Top-5':>8}{'MAE':>8}{'Pearson':>9}")
-    print(f"default {str(r['default_weights']['weights']):>14}"
-          f"{dm['top1']:>8.2f}{dm['top3']:>8.2f}{dm['top5']:>8.2f}"
-          f"{(dm['score_mae'] or 0):>8.3f}{(dm['score_pearson'] or 0):>9.2f}")
-    print(f"tuned   {str(tuple(round(x,2) for x in r['tuned_weights']['weights'])):>14}"
-          f"{tm['top1']:>8.2f}{tm['top3']:>8.2f}{tm['top5']:>8.2f}"
-          f"{(tm['score_mae'] or 0):>8.3f}{(tm['score_pearson'] or 0):>9.2f}")
-    print("-" * 68)
-    print("Ablation from default weights (Top-1 when a dimension is removed):")
+
+    dl, tl = r["default_weights"]["level"], r["tuned_weights"]["level"]
+    print("-" * 74)
+    print("LEVEL CLASSIFICATION vs teacher (gold level from duplicationResult, Table III)")
+    print(f"  gold level distribution: {dl['gold_level_dist']}")
+    print(f"{'':22}{'Acc':>6}{'Adj':>6}{'MacroF1':>9}{'BinF1':>7}{'AUC':>6}")
+    print(f"  default {str(r['default_weights']['weights']):>13}"
+          f"{dl['level_accuracy']:>6.2f}{dl['adjacent_accuracy']:>6.2f}{dl['macro_f1']:>9.2f}"
+          f"{dl['binary_f1']:>7.2f}{(dl['auc'] or 0):>6.2f}")
+    print(f"  tuned   {str(tuple(round(x,2) for x in r['tuned_weights']['weights'])):>13}"
+          f"{tl['level_accuracy']:>6.2f}{tl['adjacent_accuracy']:>6.2f}{tl['macro_f1']:>9.2f}"
+          f"{tl['binary_f1']:>7.2f}{(tl['auc'] or 0):>6.2f}")
+
+    print("-" * 74)
+    print("Ablation from default weights (level macro-F1 when a dimension is removed):")
     for name, row in r["ablation_from_default"]["drop"].items():
-        print(f"  − {name:10}  Top-1 = {row['top1']:.2f}   Δ = {row['delta_vs_full']:+.2f}")
-    print("=" * 68)
+        print(f"  − {name:10}  macro-F1 = {row['macro_f1']:.2f}   Δ = {row['delta_vs_full']:+.2f}")
+
+    dr = r["default_weights"]["ranking"]
+    print("-" * 74)
+    print(f"(secondary) ranking: Top-1 {dr['top1']:.2f} · Top-3 {dr['top3']:.2f} · "
+          f"Top-5 {dr['top5']:.2f} · score Pearson {(dr['score_pearson'] or 0):.2f} · "
+          f"MAE {(dr['score_mae'] or 0):.3f}")
+    print("=" * 74)
     print(f"report → {_REPORT_FILE}")
 
 
