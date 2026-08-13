@@ -1,0 +1,73 @@
+{
+  "semantic_backend": "sbert",
+  "corpus_size": 103,
+  "queries_total": 59,
+  "queries_resolved": 59,
+  "sedo_coverage": {
+    "corpus": {
+      "n": 103,
+      "tech_or_method": 0.9612,
+      "domain": 0.835
+    },
+    "queries": {
+      "n": 59,
+      "tech_or_method": 0.7288,
+      "domain": 0.8136
+    }
+  },
+  "default_weights": {
+    "weights": [
+      0.3,
+      0.2,
+      0.3,
+      0.2
+    ],
+    "metrics": {
+      "n_resolved": 59,
+      "top1": 0.1017,
+      "top3": 0.2542,
+      "top5": 0.4068,
+      "score_mae": 0.138,
+      "score_pearson": 0.4729,
+      "score_spearman": 0.5496
+    }
+  },
+  "tuned_weights": {
+    "weights": [
+      0.5,
+      0.3,
+      0.05,
+      0.15
+    ],
+    "metrics": {
+      "n_resolved": 59,
+      "top1": 0.1695,
+      "top3": 0.2373,
+      "top5": 0.3051,
+      "score_mae": 0.1112,
+      "score_pearson": 0.5858,
+      "score_spearman": 0.644
+    }
+  },
+  "ablation_from_default": {
+    "full_top1": 0.1017,
+    "drop": {
+      "semantic": {
+        "top1": 0.0508,
+        "delta_vs_full": -0.0508
+      },
+      "lexical": {
+        "top1": 0.0847,
+        "delta_vs_full": -0.0169
+      },
+      "structure": {
+        "top1": 0.1017,
+        "delta_vs_full": 0.0
+      },
+      "domain": {
+        "top1": 0.0508,
+        "delta_vs_full": -0.0508
+      }
+    }
+  }
+}

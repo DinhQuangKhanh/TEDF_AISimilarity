@@ -9,11 +9,10 @@ This repository is the **data-import and schema component** of the DASSF study
 Engineering Thesis Topics*): it ingests the raw topic corpus into a relational schema and
 assembles the concatenated five-field representation used by the framework.
 
-> **Scope note.** The similarity dimensions here are lightweight **token-based
-> approximations**. The full DASSF method (Sentence-BERT embeddings and the SEDO ontology with
-> Wu-Palmer / wpath measures) is **not implemented in this repository**. The MDDM fusion
-> weights, the four-level decision scale, and the structural-duplication rule **do** follow the
-> paper exactly.
+> **Scope note.** The **structural** and **domain** dimensions are grounded in the SEDO
+> ontology with **Wu-Palmer / wpath** measures, as in the paper. The **semantic** dimension
+> here is a token-Jaccard approximation (the paper uses Sentence-BERT). The MDDM fusion weights,
+> the four-level decision scale, and the structural-duplication rule follow the paper exactly.
 
 ## Topic model
 
@@ -93,6 +92,52 @@ Successful response:
   "data": { "inserted": 3, "new_ids": [1, 2, 3], "errors": [] } }
 ```
 
+## Submitting a single topic
+
+`POST /api/v1/theses` adds one topic the same way the Excel importer does — normalize (AI fills
+any missing field), map to the schema, run both duplicate checks, save, then score it against
+every existing topic. The similarity results come back **in the same response**, so no second
+call is needed.
+
+```bash
+curl -X POST http://localhost:8000/api/v1/theses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Pharmacy Management System",
+    "description": "A web system to manage pharmacy inventory and customers, built with React.",
+    "scope": "React frontend, Node.js backend, PostgreSQL database, REST API.",
+    "objectives": "Digitize pharmacy sales, manage medicine stock, generate reports.",
+    "expected_result": "A deployed web application for pharmacy staff.",
+    "semester": "2024-1",
+    "program": "Software Engineering",
+    "domains": ["Pharmacy"],
+    "technologies": ["React", "Node.js", "PostgreSQL"]
+  }'
+```
+
+```json
+{
+  "success": true, "message": "Thesis created",
+  "data": {
+    "thesis": { "thesis_id": 2, "title": "Pharmacy Management System", "...": "..." },
+    "needs_review": false,
+    "similarities": [
+      { "thesis_a_id": 1, "thesis_b_id": 2,
+        "semantic_score": 0.7353, "lexical_score": 0.664,
+        "structure_score": 1.0, "domain_score": 0.2052,
+        "overall_score": 0.6944, "level": "High",
+        "action": "Require substantial revision",
+        "is_structural_duplication": true,
+        "reason": ["same tech stack with a different business domain", "..."] }
+    ]
+  }
+}
+```
+
+Responses: `201` on success, `409` when an identical topic already exists, `422` when the title
+is missing. `POST /api/v1/import/excel` and `POST /api/v1/similarity/run-new` also include a
+`similarities` array in their response.
+
 ## Duplicate detection
 
 Both checks read **all five content fields** plus `semester` and `program`:
@@ -116,8 +161,8 @@ S_composite = 0.30·S_sem + 0.20·S_lex + 0.30·S_str + 0.20·S_dom
 |-----------|-----------------|------------------|-------------|
 | Semantic | SBERT cosine | token Jaccard | all five fields |
 | Lexical | TF-IDF Jaccard | **TF-IDF weighted Jaccard** (corpus IDF) | all five fields |
-| Structural | Wu-Palmer over SEDO | token Jaccard + technology/structure tags | scope + description |
-| Domain | wpath over SEDO | token Jaccard + domain tags | description + objectives |
+| Structural | Wu-Palmer over SEDO | **Wu-Palmer over SEDO** | scope + description (+ tech/structure tags) |
+| Domain | wpath over SEDO | **wpath over SEDO** | description + objectives (+ domain tags) |
 
 ### Four-level decision scale
 
@@ -142,11 +187,54 @@ paper does not fix these numerically — tune them on a labeled set. The
 `is_structural_duplication` for every pair, alongside the four per-dimension scores, so a
 committee can see *why* a pair was flagged.
 
+## SEDO ontology
+
+The structural and domain dimensions are grounded in **SEDO** (Software Engineering Domain
+Ontology), a four-layer hierarchy (Technical Stack, Methodology, Domain Entity, Task Type) with
+74 concepts in 18 parent classes and 238 surface keywords. It lives in
+[`app/ontology/sedo.json`](app/ontology/sedo.json) and is loaded by `app/ontology/sedo.py`.
+
+- **Wu-Palmer** (structural): `sim = 2·depth(LCS) / (depth(c1) + depth(c2))` — e.g.
+  `wu_palmer(React, Angular) = 0.75` (interchangeable Frontend frameworks).
+- **wpath** (domain): `sim = 1 / (1 + path(c1,c2)·k^IC(LCS))` with intrinsic IC — e.g.
+  `wpath(Hotel, Pharmacy) ≈ 0.205` (different business domains).
+- **Recognition (NER):** free text is mapped to concepts by matching the 238 surface keywords.
+
+Configuration (`.env`):
+
+```env
+SEDO_FALLBACK_TOKENS=false   # default: matches the paper (unrecognized concept -> score drops)
+WPATH_K=0.8                  # wpath k parameter
+```
+
+When SEDO recognizes no concept for a dimension, the default (paper) behavior is to let the
+score drop — reproducing the false negatives discussed in the paper's error analysis (Sect 5.5,
+e.g. "Microsoft SQL" is not in the vocabulary). Set `SEDO_FALLBACK_TOKENS=true` to fall back to
+token Jaccard instead.
+
+## Reproducibility — verifying the formulas
+
+The paper's numeric claims (Wu-Palmer, wpath, MDDM weights, the four-level scale, and the
+structural-duplication rule) are pinned as machine-checkable cases in
+[`tests/fixtures/paper_formulas.json`](tests/fixtures/paper_formulas.json). Each case lists its
+inputs, the expected value, and the paper location it comes from.
+
+Run them through the real code:
+
+```bash
+# as part of the test suite
+docker compose exec app python -m pytest tests/test_paper_formulas.py -v
+
+# or as a standalone PASS/FAIL report (no pytest)
+docker compose exec app python tools/verify_formulas.py
+```
+
 ## Endpoints
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/api/v1/import/excel` | Import topics from Excel |
+| POST | `/api/v1/theses` | **Add one new topic** and score it against the corpus |
 | GET | `/api/v1/theses` | List topics (pagination + filters) |
 | GET | `/api/v1/theses/{id}` | Topic detail with classifications |
 | GET | `/api/v1/theses/{id}/similarities` | Similar pairs with scores and action |
@@ -197,3 +285,8 @@ python tools/learn_mddm_weights.py --input scored_pairs.xlsx \
 
 To apply the learned weights, update `WEIGHTS` in `app/utils/score_calculator.py`
 (`semantic=α, lexical=β, structure=γ, domain=δ`).
+
+
+Đề tài của hệ thống web đang có projectId kiểu uuid
+similarity lại nhận list[int] ids làm request_body
+---> Sửa lại thành kiểu list[uuid]

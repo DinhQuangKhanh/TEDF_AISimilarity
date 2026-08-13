@@ -49,6 +49,8 @@ def test_import_success_and_duplicate_skip():
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["inserted"] == 1
+    # The import response carries the similarity results, no second call needed.
+    assert "similarities" in payload["data"]
 
     duplicate_response = client.post(
         "/api/v1/import/excel",

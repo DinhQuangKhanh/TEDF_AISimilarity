@@ -13,14 +13,16 @@ LEVELS = {"Critical", "High", "Moderate", "Low"}
 
 
 def build_thesis(title: str):
+    # Uses terms the SEDO ontology recognizes (React, Hotel) so the structural
+    # and domain dimensions are exercised.
     thesis = Thesis(
         title=title,
-        description="demo",
-        scope="web platform",
-        objectives="build core features",
-        expected_result="a working system",
+        description="a hotel booking management system",
+        scope="React frontend with PostgreSQL database and REST API",
+        objectives="digitize hotel booking and manage rooms",
+        expected_result="a deployed web application",
     )
-    thesis.domains = [Domain(name="E-commerce")]
+    thesis.domains = [Domain(name="Hotel")]
     thesis.semantics = [SemanticCategory(name="Management System")]
     thesis.structures = [StructureType(name="Web Application")]
     thesis.lexical_tags = [LexicalTag(name="order")]
@@ -74,6 +76,19 @@ def test_is_structural_duplication():
     assert not is_structural_duplication(0.95, 0.80)
     # Different stack -> not the structural class.
     assert not is_structural_duplication(0.30, 0.20)
+
+
+def test_reasons_are_not_contradictory():
+    # A structural duplication (different domain) must never also claim "same business domain".
+    left = build_thesis("Hotel Management System")
+    right = build_thesis("Pharmacy Management System")
+    right.description = "a pharmacy inventory management system"
+    right.objectives = "digitize pharmacy sales and manage medicine stock"
+    right.domains = [Domain(name="Pharmacy")]
+    scores = calculate_scores(left, right)
+    assert scores["structural_duplication"] is True
+    assert "same business domain" not in scores["reason"]
+    assert "same tech stack with a different business domain" in scores["reason"]
 
 
 def test_weighted_jaccard_without_idf_is_plain_jaccard():

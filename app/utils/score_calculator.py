@@ -8,6 +8,7 @@ from app.core.config import SEDO_FALLBACK_TOKENS, WPATH_K
 from app.models.similarity import Similarity
 from app.models.thesis import Thesis
 from app.ontology.sedo import get_sedo
+from app.services.semantic_encoder import semantic_similarity
 from app.utils.text_cleaner import tokenize
 
 # Which ontology layers each dimension consults (paper Sect. 3.4).
@@ -49,6 +50,13 @@ def _content_text(thesis: Thesis) -> str:
     )
 
 
+def _surface_text(thesis: Thesis) -> str:
+    """Text for the semantic/lexical dimensions: the TITLE (paper §V-E — both operate on the
+    title's surface form). Falls back to the full content only when a title is missing, so we
+    do not compare on boilerplate-heavy descriptions that inflate token overlap."""
+    return (thesis.title or "").strip() or _content_text(thesis)
+
+
 def jaccard(a: set[str], b: set[str]) -> float:
     union = a | b
     if not union:
@@ -69,11 +77,11 @@ def weighted_jaccard(a: set[str], b: set[str], idf: dict[str, float] | None = No
 
 
 def build_idf(theses: list[Thesis]) -> dict[str, float]:
-    """Smoothed IDF over the five-field text of the whole corpus."""
+    """Smoothed IDF over the corpus titles (the lexical dimension is title-level)."""
     total = len(theses)
     document_frequency: dict[str, int] = {}
     for thesis in theses:
-        for token in tokenize(_content_text(thesis)):
+        for token in tokenize(_surface_text(thesis)):
             document_frequency[token] = document_frequency.get(token, 0) + 1
     return {
         token: math.log((total + 1) / (count + 1)) + 1.0
@@ -135,24 +143,28 @@ def _ontology_dimension(sedo, text_a, text_b, layers, measure, fallback_a, fallb
 def calculate_scores(a: Thesis, b: Thesis, idf: dict[str, float] | None = None) -> dict:
     sedo = get_sedo()
 
-    # Semantic and lexical both read all five fields (paper Table 2); they differ in weighting.
-    content_a = tokenize(_content_text(a))
-    content_b = tokenize(_content_text(b))
+    # Semantic and lexical both read the title (paper §V-E); they differ in method:
+    # semantic = SBERT cosine (meaning), lexical = TF-IDF weighted Jaccard (surface tokens).
+    surface_a = _surface_text(a)
+    surface_b = _surface_text(b)
+    lexical_tokens_a = tokenize(surface_a)
+    lexical_tokens_b = tokenize(surface_b)
 
-    # Structural = tech stack + methodology, read from scope + description (+ tech/structure tags).
-    struct_text_a = _join(a.scope, a.description, *(t.name for t in a.technologies), *(s.name for s in a.structures))
-    struct_text_b = _join(b.scope, b.description, *(t.name for t in b.technologies), *(s.name for s in b.structures))
+    # Structural = tech stack + methodology, read from title + scope + description (+ tech/structure tags).
+    # The title is included so title-only topics (e.g. a freshly submitted proposal) still map into SEDO.
+    struct_text_a = _join(a.title, a.scope, a.description, *(t.name for t in a.technologies), *(s.name for s in a.structures))
+    struct_text_b = _join(b.title, b.scope, b.description, *(t.name for t in b.technologies), *(s.name for s in b.structures))
     struct_tokens_a = tokenize(struct_text_a)
     struct_tokens_b = tokenize(struct_text_b)
 
-    # Domain = business domain, read from description + objectives (+ domain tags).
-    domain_text_a = _join(a.description, a.objectives, *(d.name for d in a.domains))
-    domain_text_b = _join(b.description, b.objectives, *(d.name for d in b.domains))
+    # Domain = business domain, read from title + description + objectives (+ domain tags).
+    domain_text_a = _join(a.title, a.description, a.objectives, *(d.name for d in a.domains))
+    domain_text_b = _join(b.title, b.description, b.objectives, *(d.name for d in b.domains))
     domain_tokens_a = tokenize(domain_text_a)
     domain_tokens_b = tokenize(domain_text_b)
 
-    semantic = clamp(jaccard(content_a, content_b))
-    lexical = clamp(weighted_jaccard(content_a, content_b, idf))
+    semantic = clamp(semantic_similarity(surface_a, surface_b))
+    lexical = clamp(weighted_jaccard(lexical_tokens_a, lexical_tokens_b, idf))
     structure = clamp(
         _ontology_dimension(
             sedo, struct_text_a, struct_text_b, _STRUCT_LAYERS, sedo.wu_palmer, struct_tokens_a, struct_tokens_b

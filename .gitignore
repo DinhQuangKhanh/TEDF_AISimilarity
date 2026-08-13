@@ -125,3 +125,4 @@ Pipfile.lock
 # UV package manager
 .uv/
 uv.lock
+tedf_data.sql
