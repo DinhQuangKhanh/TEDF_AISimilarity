@@ -140,11 +140,17 @@ def _ontology_dimension(sedo, text_a, text_b, layers, measure, fallback_a, fallb
     return similarity
 
 
-def calculate_scores(a: Thesis, b: Thesis, idf: dict[str, float] | None = None) -> dict:
+def calculate_scores(a: Thesis, b: Thesis, lexical_model=None) -> dict:
+    """Score one pair across the four MDDM dimensions.
+
+    ``lexical_model`` is optional. Pass a fitted lexical scorer (``app.services.lexical
+    .LexicalScorer``, duck-typed on ``.similarity``) for the paper's TF-IDF cosine; pass an IDF
+    ``dict`` (legacy) or ``None`` to fall back to TF-IDF-weighted Jaccard on the surface tokens.
+    """
     sedo = get_sedo()
 
     # Semantic and lexical both read the title (paper §V-E); they differ in method:
-    # semantic = SBERT cosine (meaning), lexical = TF-IDF weighted Jaccard (surface tokens).
+    # semantic = SBERT cosine (meaning), lexical = TF-IDF cosine over Module-1 folded terms.
     surface_a = _surface_text(a)
     surface_b = _surface_text(b)
     lexical_tokens_a = tokenize(surface_a)
@@ -157,14 +163,21 @@ def calculate_scores(a: Thesis, b: Thesis, idf: dict[str, float] | None = None) 
     struct_tokens_a = tokenize(struct_text_a)
     struct_tokens_b = tokenize(struct_text_b)
 
-    # Domain = business domain, read from title + description + objectives (+ domain tags).
-    domain_text_a = _join(a.title, a.description, a.objectives, *(d.name for d in a.domains))
-    domain_text_b = _join(b.title, b.description, b.objectives, *(d.name for d in b.domains))
+    # Domain = the business domain, taken from the TITLE + author-provided domain tags. Descriptions
+    # are deliberately excluded: they carry operational nouns ("staff", "stock", "inventory", "customers")
+    # that falsely match DomainEntity concepts and blur the hotel-vs-pharmacy distinction the paper cares about.
+    domain_text_a = _join(a.title, *(d.name for d in a.domains))
+    domain_text_b = _join(b.title, *(d.name for d in b.domains))
     domain_tokens_a = tokenize(domain_text_a)
     domain_tokens_b = tokenize(domain_text_b)
 
     semantic = clamp(semantic_similarity(surface_a, surface_b))
-    lexical = clamp(weighted_jaccard(lexical_tokens_a, lexical_tokens_b, idf))
+    if lexical_model is not None and hasattr(lexical_model, "similarity"):
+        lexical = clamp(lexical_model.similarity(surface_a, surface_b))
+    else:
+        # Legacy / fallback: an IDF dict (or None) → TF-IDF-weighted Jaccard on surface tokens.
+        idf = lexical_model if isinstance(lexical_model, dict) else None
+        lexical = clamp(weighted_jaccard(lexical_tokens_a, lexical_tokens_b, idf))
     structure = clamp(
         _ontology_dimension(
             sedo, struct_text_a, struct_text_b, _STRUCT_LAYERS, sedo.wu_palmer, struct_tokens_a, struct_tokens_b
@@ -216,8 +229,11 @@ def calculate_similarity_for_new(db: Session, new_ids: list[uuid.UUID]) -> None:
     thesis_map = {thesis.thesis_id: thesis for thesis in all_theses}
     new_theses = [thesis_map[thesis_id] for thesis_id in new_ids if thesis_id in thesis_map]
 
-    # IDF is corpus-level, so build it once per run.
-    idf = build_idf(all_theses)
+    # The lexical model (TF-IDF cosine) is corpus-level, so fit it once per run.
+    # Lazy import avoids a module-level cycle (lexical → score_calculator).
+    from app.services.lexical import build_lexical_scorer
+
+    lexical_model = build_lexical_scorer(all_theses)
 
     seen: set[tuple[uuid.UUID, uuid.UUID]] = set()
     for new_thesis in new_theses:
@@ -236,7 +252,7 @@ def calculate_similarity_for_new(db: Session, new_ids: list[uuid.UUID]) -> None:
             )
             if exists:
                 continue
-            scores = calculate_scores(new_thesis, other, idf)
+            scores = calculate_scores(new_thesis, other, lexical_model)
             db.add(
                 Similarity(
                     thesis_a_id=thesis_a_id,

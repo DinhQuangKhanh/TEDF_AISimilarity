@@ -7,6 +7,8 @@ from app.main import app
 client = TestClient(app)
 
 PAYLOAD = {
+    # thesis_id is required: it is the web system's project id, reused as the thesis id.
+    "thesis_id": "11111111-1111-1111-1111-111111111111",
     "title": "Hotel Management System",
     "description": "A web system to manage hotel bookings and customers, built with React.",
     "scope": "React frontend, Node.js backend, PostgreSQL database, REST API.",
@@ -32,6 +34,7 @@ def _second_topic():
     second = dict(PAYLOAD)
     second.update(
         {
+            "thesis_id": "22222222-2222-2222-2222-222222222222",
             "title": "Pharmacy Management System",
             "description": "A web system to manage pharmacy inventory and customers, built with React.",
             "objectives": "Digitize pharmacy sales, manage medicine stock, generate reports.",

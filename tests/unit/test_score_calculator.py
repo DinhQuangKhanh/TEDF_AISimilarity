@@ -100,3 +100,20 @@ def test_weighted_jaccard_uses_idf():
     idf = {"common": 1.0, "rare": 5.0}
     # intersection weight = 1.0 ("common"); union weight = 1.0 + 5.0
     assert weighted_jaccard({"common", "rare"}, {"common"}, idf) == 1.0 / 6.0
+
+
+def test_calculate_scores_accepts_lexical_model():
+    # Passing a fitted TF-IDF LexicalScorer routes the lexical dimension through cosine (paper §V-E).
+    from app.services.lexical import LexicalScorer
+
+    model = LexicalScorer(["Hotel booking with React", "Pharmacy inventory with Node"])
+    scores = calculate_scores(build_thesis("Hotel Management"), build_thesis("Hotel Management"), model)
+    assert 0.0 <= scores["lexical_score"] <= 1.0
+    assert scores["overall_score"] == 1.0  # identical topics stay Critical regardless of lexical path
+    assert scores["level"] == "Critical"
+
+
+def test_calculate_scores_accepts_legacy_idf_dict():
+    scores = calculate_scores(build_thesis("Hotel"), build_thesis("Hotel"), {"hotel": 2.0})
+    assert 0.0 <= scores["lexical_score"] <= 1.0
+    assert scores["level"] in LEVELS

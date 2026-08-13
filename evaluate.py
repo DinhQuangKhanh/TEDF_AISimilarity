@@ -28,6 +28,7 @@ import json
 import os
 from collections import namedtuple
 
+from app.services.lexical import build_lexical_scorer
 from app.services.semantic_encoder import backend_name
 from app.utils import score_calculator as sc
 from app.utils.text_cleaner import normalize_key
@@ -127,13 +128,13 @@ def resolve_target(target: str, corpus: list[EvalThesis]) -> tuple[int | None, f
 
 
 # ── scoring ─────────────────────────────────────────────────────────────────────────
-def dims_matrix(queries, corpus, idf):
+def dims_matrix(queries, corpus, lexical_model):
     """queries × corpus grid of (semantic, lexical, structure, domain) tuples."""
     matrix = []
     for q in queries:
         row = []
         for cand in corpus:
-            s = sc.calculate_scores(q["_thesis"], cand, idf)
+            s = sc.calculate_scores(q["_thesis"], cand, lexical_model)
             row.append((s["semantic_score"], s["lexical_score"], s["structure_score"], s["domain_score"]))
         matrix.append(row)
     return matrix
@@ -355,8 +356,8 @@ def main() -> None:
         q["target_idx"] = idx if match >= 0.5 else None
         q["target_match"] = round(match, 3)
 
-    idf = sc.build_idf(corpus)
-    matrix = dims_matrix(queries, corpus, idf)
+    lexical_model = build_lexical_scorer(corpus)
+    matrix = dims_matrix(queries, corpus, lexical_model)
 
     default_rank = ranking_metrics(queries, matrix, _DEFAULT_WEIGHTS)
     default_level = level_metrics(queries, matrix, _DEFAULT_WEIGHTS)

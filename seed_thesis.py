@@ -20,9 +20,10 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models.classification import Tech
+from app.models.classification import Domain, StructureType, Tech
 from app.models.thesis import Thesis
 from app.repositories.classification_repository import ClassificationRepository
+from app.services.preprocessing import concept_names, preprocess
 from app.services.similarity_service import SimilarityService
 
 # Web project-id formulas, mirrored from LoadTestDataSeeder.cs verbatim.
@@ -217,6 +218,15 @@ def main() -> None:
                 enriched_count += 1
             else:
                 thesis = Thesis(thesis_id=thesis_id, semester=semester, program="SE", title=fallback_title)
+
+            # Derive Domain + Structure(method/task) tags from the TITLE via Module 1 (SEDO NER),
+            # so the domain dimension has clean tags instead of nothing (P1.7). Title-only, to avoid
+            # incidental operational nouns in the description polluting the business-domain tags.
+            title_m1 = preprocess(thesis.title)
+            for name in concept_names(title_m1.domains):
+                thesis.domains.append(classifications.get_or_create(Domain, name))
+            for name in concept_names(title_m1.methods | title_m1.tasks):
+                thesis.structures.append(classifications.get_or_create(StructureType, name))
 
             session.add(thesis)
             new_ids.append(thesis_id)
