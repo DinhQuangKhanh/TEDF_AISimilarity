@@ -1,0 +1,43 @@
+{
+  "semantic_backend": "sbert",
+  "corpus_size": 103,
+  "queries_evaluated": 59,
+  "task": "retrieval of the teacher's most-likely-duplicate among all prior topics",
+  "methods": {
+    "B1 TF-IDF Cosine": {
+      "recall@1": 0.0847,
+      "recall@5": 0.2712,
+      "recall@10": 0.322,
+      "mrr": 0.1804,
+      "auc": 0.7279
+    },
+    "B2 BM25": {
+      "recall@1": 0.0847,
+      "recall@5": 0.2542,
+      "recall@10": 0.4068,
+      "mrr": 0.1829,
+      "auc": 0.7511
+    },
+    "B3 SBERT": {
+      "recall@1": 0.1017,
+      "recall@5": 0.2712,
+      "recall@10": 0.4746,
+      "mrr": 0.2016,
+      "auc": 0.8221
+    },
+    "B4 DASSF (no ontology)": {
+      "recall@1": 0.1186,
+      "recall@5": 0.4237,
+      "recall@10": 0.5254,
+      "mrr": 0.2582,
+      "auc": 0.8514
+    },
+    "Full DASSF": {
+      "recall@1": 0.1356,
+      "recall@5": 0.3898,
+      "recall@10": 0.5424,
+      "mrr": 0.2653,
+      "auc": 0.8724
+    }
+  }
+}

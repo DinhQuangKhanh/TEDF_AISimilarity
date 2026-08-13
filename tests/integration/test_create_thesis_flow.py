@@ -85,3 +85,27 @@ def test_missing_title_is_rejected():
     payload = dict(PAYLOAD)
     payload["title"] = ""
     assert client.post("/api/v1/theses", json=payload).status_code == 422
+
+
+def test_explain_endpoint_returns_full_report():
+    client.post("/api/v1/theses", json=PAYLOAD)
+    client.post("/api/v1/theses", json=_second_topic())
+    a, b = PAYLOAD["thesis_id"], _second_topic()["thesis_id"]
+
+    response = client.get(f"/api/v1/theses/{a}/explain/{b}")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert set(data["breakdown"]) == {"semantic", "lexical", "structure", "domain"}
+    assert data["action"]
+    assert data["revision_suggestion"]
+    # Hotel vs Pharmacy on the same stack → the paper's structural-duplication case.
+    assert data["is_structural_duplication"] is True
+    assert "React" in data["shared_concepts"]["tech"]
+
+
+def test_explain_endpoint_404_for_unknown_topic():
+    response = client.get(
+        "/api/v1/theses/11111111-1111-1111-1111-111111111111"
+        "/explain/99999999-9999-9999-9999-999999999999"
+    )
+    assert response.status_code == 404
