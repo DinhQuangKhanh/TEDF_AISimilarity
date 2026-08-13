@@ -97,12 +97,13 @@ def main() -> None:
     tfidf = TfidfCosine(corpus_texts)
     bm25 = BM25Index(corpus_texts)
     lexical_model = build_lexical_scorer(corpus)
+    concept_idf = sc.build_concept_idf(corpus)
 
     # Precompute the four DASSF sub-scores once per (query, candidate); baselines reuse them.
     dims: dict[tuple[int, int], tuple] = {}
     for qi, q in enumerate(resolved):
         for ci, cand in enumerate(corpus):
-            s = sc.calculate_scores(q["_thesis"], cand, lexical_model)
+            s = sc.calculate_scores(q["_thesis"], cand, lexical_model, concept_idf)
             dims[(qi, ci)] = (s["semantic_score"], s["lexical_score"], s["structure_score"], s["domain_score"])
 
     functions = _score_functions(resolved, corpus, dims, tfidf, bm25)

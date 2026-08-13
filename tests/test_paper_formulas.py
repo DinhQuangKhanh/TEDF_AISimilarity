@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from app.core.config import _PAPER_WEIGHTS
 from app.ontology.sedo import get_sedo
 from app.utils.score_calculator import (
-    WEIGHTS,
     action_for,
     composite_score,
     is_structural_duplication,
@@ -41,17 +41,19 @@ def test_wpath(case):
 
 
 def test_mddm_weights():
+    # The paper's Eq.1 weights are the code's PAPER default. (The deployed weights may be tuned/env
+    # overrides — that is a deployment choice, not a claim about the paper.)
     w = DATA["mddm_weights"]
-    assert WEIGHTS["semantic"] == w["semantic"]
-    assert WEIGHTS["lexical"] == w["lexical"]
-    assert WEIGHTS["structure"] == w["structure"]
-    assert WEIGHTS["domain"] == w["domain"]
-    assert round(sum(WEIGHTS.values()), 6) == 1.0
+    assert _PAPER_WEIGHTS == {"semantic": w["semantic"], "lexical": w["lexical"],
+                             "structure": w["structure"], "domain": w["domain"]}
+    assert round(sum(_PAPER_WEIGHTS.values()), 6) == 1.0
 
 
 @pytest.mark.parametrize("case", DATA["composite"], ids=_id)
 def test_composite(case):
-    value = composite_score(case["s_sem"], case["s_lex"], case["s_str"], case["s_dom"])
+    # The paper's worked examples use the paper weights; pass them explicitly so this test verifies
+    # the FORMULA regardless of the deployed weight vector.
+    value = composite_score(case["s_sem"], case["s_lex"], case["s_str"], case["s_dom"], _PAPER_WEIGHTS)
     assert value == pytest.approx(case["expected"], abs=case["tol"])
 
 

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from app.services.explanation import build_explanation
 from app.services.preprocessing import concept_names, preprocess
-from app.utils.score_calculator import WEIGHTS, action_for, calculate_scores
+from app.utils.score_calculator import WEIGHTS, action_for, build_concept_idf, calculate_scores
 
 
 def _text(obj, *fields: str) -> str:
@@ -77,7 +77,8 @@ def analyze_topic(query, corpus, lexical_model, *, top_k: int = 5, semantic_back
                        out={"count": len(corpus)}))
 
     # ── Step 4 — four-dimension scoring against every prior topic ────────────────────
-    scored = [(cand, calculate_scores(query, cand, lexical_model)) for cand in corpus]
+    concept_idf = build_concept_idf(corpus)
+    scored = [(cand, calculate_scores(query, cand, lexical_model, concept_idf)) for cand in corpus]
     scored.sort(key=lambda pair: pair[1]["overall_score"], reverse=True)
     steps.append(_step("scoring", "Chấm 4 chiều × từng đề tài", "success",
                        detail=f"So tiêu đề mới với {len(corpus)} đề tài trên 4 chiều "

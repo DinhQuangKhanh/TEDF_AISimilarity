@@ -128,13 +128,13 @@ def resolve_target(target: str, corpus: list[EvalThesis]) -> tuple[int | None, f
 
 
 # ── scoring ─────────────────────────────────────────────────────────────────────────
-def dims_matrix(queries, corpus, lexical_model):
+def dims_matrix(queries, corpus, lexical_model, concept_idf):
     """queries × corpus grid of (semantic, lexical, structure, domain) tuples."""
     matrix = []
     for q in queries:
         row = []
         for cand in corpus:
-            s = sc.calculate_scores(q["_thesis"], cand, lexical_model)
+            s = sc.calculate_scores(q["_thesis"], cand, lexical_model, concept_idf)
             row.append((s["semantic_score"], s["lexical_score"], s["structure_score"], s["domain_score"]))
         matrix.append(row)
     return matrix
@@ -294,20 +294,29 @@ def _r(x):
 
 
 # ── weight grid search over the simplex (step 0.05) ─────────────────────────────────
-def simplex(step_pct=5):
-    steps = 100 // step_pct
-    for a in range(steps + 1):
-        for b in range(steps + 1 - a):
-            for c in range(steps + 1 - a - b):
-                d = steps - a - b - c
-                yield (a * step_pct / 100, b * step_pct / 100, c * step_pct / 100, d * step_pct / 100)
+def simplex(n_steps=20):
+    """Every (α,β,γ,δ) on the probability simplex at resolution 1/n_steps (each ≥0, sum=1).
+    n_steps = round(1/step): step 0.05 → 20, 0.04 → 25, 0.025 → 40."""
+    n = int(round(n_steps))
+    for a in range(n + 1):
+        for b in range(n + 1 - a):
+            for c in range(n + 1 - a - b):
+                d = n - a - b - c
+                yield (a / n, b / n, c / n, d / n)
 
 
-def tune_weights(queries, matrix):
+def simplex_size(n_steps: int) -> int:
+    """Number of grid points at a given resolution — C(n+3, 3)."""
+    n = int(round(n_steps))
+    return (n + 1) * (n + 2) * (n + 3) // 6
+
+
+def tune_weights(queries, matrix, n_steps=20):
     """Grid-search the simplex for the weights that best reproduce the teacher's LEVELS
-    (paper's primary task): maximize level macro-F1, tie-break by AUC then level accuracy."""
+    (paper's primary task): maximize level macro-F1, tie-break by AUC then level accuracy.
+    ``n_steps`` sets the resolution (1/step); default 20 = step 0.05."""
     best, best_key = None, None
-    for w in simplex(5):
+    for w in simplex(n_steps):
         m = level_metrics(queries, matrix, w)
         key = (m["macro_f1"], m["auc"] or 0.0, m["level_accuracy"])
         if best_key is None or key > best_key:
@@ -357,7 +366,8 @@ def main() -> None:
         q["target_match"] = round(match, 3)
 
     lexical_model = build_lexical_scorer(corpus)
-    matrix = dims_matrix(queries, corpus, lexical_model)
+    concept_idf = sc.build_concept_idf(corpus)
+    matrix = dims_matrix(queries, corpus, lexical_model, concept_idf)
 
     default_rank = ranking_metrics(queries, matrix, _DEFAULT_WEIGHTS)
     default_level = level_metrics(queries, matrix, _DEFAULT_WEIGHTS)

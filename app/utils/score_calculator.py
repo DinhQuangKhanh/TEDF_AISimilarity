@@ -4,6 +4,7 @@ import uuid
 
 from sqlalchemy.orm import Session
 
+from app.core import config
 from app.core.config import SEDO_FALLBACK_TOKENS, WPATH_K
 from app.models.similarity import Similarity
 from app.models.thesis import Thesis
@@ -11,17 +12,15 @@ from app.ontology.sedo import get_sedo
 from app.services.semantic_encoder import semantic_similarity
 from app.utils.text_cleaner import tokenize
 
-# Which ontology layers each dimension consults (paper Sect. 3.4).
-_STRUCT_LAYERS = {"TechnicalStack", "Methodology", "TaskType"}
+# Structural reads Technical Stack ∪ Methodology (paper §V-E). TaskType (CRUD/Analytics/…) is
+# excluded by default because it is near-universal and inflates the score (P3.1); re-enable via
+# STRUCT_INCLUDE_TASKTYPE. Domain reads DomainEntity.
+_STRUCT_LAYERS = {"TechnicalStack", "Methodology"} | ({"TaskType"} if config.STRUCT_INCLUDE_TASKTYPE else set())
 _DOMAIN_LAYERS = {"DomainEntity"}
 
-# MDDM fusion weights (DASSF paper, Eq. 1): alpha=0.30, beta=0.20, gamma=0.30, delta=0.20.
-WEIGHTS = {
-    "semantic": 0.30,
-    "lexical": 0.20,
-    "structure": 0.30,
-    "domain": 0.20,
-}
+# MDDM fusion weights (DASSF paper, Eq. 1): default alpha=0.30, beta=0.20, gamma=0.30, delta=0.20.
+# Overridable via env (see config.MDDM_WEIGHTS / P3.3).
+WEIGHTS = config.MDDM_WEIGHTS
 
 # Structural-duplication rule (paper Sect. 3.5): S_str >= TAU_STR and S_dom < TAU_DOM.
 # The paper does not fix these numerically; tune them on a labeled set.
@@ -41,20 +40,60 @@ _ACTIONS = {
 
 
 def _content_text(thesis: Thesis) -> str:
-    """Concatenate all five topic fields (paper Sect. 3.4)."""
-    return " ".join(
-        filter(
-            None,
-            [thesis.title, thesis.description, thesis.scope, thesis.objectives, thesis.expected_result],
-        )
-    )
+    """Concatenate all five topic fields (paper Sect. 3.4). Robust to thesis-like objects that omit
+    some attributes (getattr → None)."""
+    fields = ("title", "description", "scope", "objectives", "expected_result")
+    return " ".join(filter(None, (getattr(thesis, field, None) for field in fields)))
 
 
 def _surface_text(thesis: Thesis) -> str:
-    """Text for the semantic/lexical dimensions: the TITLE (paper §V-E — both operate on the
-    title's surface form). Falls back to the full content only when a title is missing, so we
-    do not compare on boilerplate-heavy descriptions that inflate token overlap."""
+    """Title-only text (kept for callers/tests that want the paper's §V-E title form)."""
     return (thesis.title or "").strip() or _content_text(thesis)
+
+
+def _has_body(thesis: Thesis) -> bool:
+    """True when the topic carries content beyond its title (description/scope/objectives/expected)."""
+    return any(
+        (getattr(thesis, field, None) or "").strip()
+        for field in ("description", "scope", "objectives", "expected_result")
+    )
+
+
+def _pair_texts(a: Thesis, b: Thesis) -> tuple[str, str]:
+    """Text pair for the semantic/lexical dimensions.
+
+    The department wants full-content matching: when BOTH topics carry the extra fields, compare all
+    six fields (title + description + objectives + scope + expected result). When either topic is
+    title-only (nothing but titleEn), fall back to a fair title-vs-title comparison — as the paper
+    describes — instead of matching a short title against a long paragraph.
+    """
+    if _has_body(a) and _has_body(b):
+        return _content_text(a), _content_text(b)
+    return _surface_text(a), _surface_text(b)
+
+
+_SEASON_ORDER = {"spring": 1, "summer": 2, "fall": 3, "autumn": 3, "winter": 0}
+
+
+def _semester_key(semester: str | None):
+    """Sortable key for a "Season Year" string, e.g. 'Summer 2026' → (2026, 2). None if unparseable."""
+    parts = (semester or "").strip().split()
+    if len(parts) != 2:
+        return None
+    season = _SEASON_ORDER.get(parts[0].lower())
+    if season is None:
+        return None
+    try:
+        return (int(parts[1]), season)
+    except ValueError:
+        return None
+
+
+def _recent_semesters(theses: list, k: int) -> set[str]:
+    """The k most-recent semester labels present in the corpus (by year then season)."""
+    keyed = {t.semester: _semester_key(t.semester) for t in theses if _semester_key(getattr(t, "semester", None))}
+    ordered = sorted(keyed, key=lambda s: keyed[s], reverse=True)
+    return set(ordered[:k])
 
 
 def jaccard(a: set[str], b: set[str]) -> float:
@@ -107,13 +146,15 @@ def action_for(level: str) -> str:
     return _ACTIONS.get(level, "")
 
 
-def composite_score(semantic: float, lexical: float, structure: float, domain: float) -> float:
-    """MDDM weighted fusion (paper Eq. 1)."""
+def composite_score(semantic: float, lexical: float, structure: float, domain: float,
+                    weights: dict | None = None) -> float:
+    """MDDM weighted fusion (paper Eq. 1). Uses the deployed ``WEIGHTS`` unless ``weights`` is given."""
+    w = weights or WEIGHTS
     return clamp(
-        semantic * WEIGHTS["semantic"]
-        + lexical * WEIGHTS["lexical"]
-        + structure * WEIGHTS["structure"]
-        + domain * WEIGHTS["domain"]
+        semantic * w["semantic"]
+        + lexical * w["lexical"]
+        + structure * w["structure"]
+        + domain * w["domain"]
     )
 
 
@@ -126,40 +167,74 @@ def _join(*parts) -> str:
     return " ".join(part for part in parts if part)
 
 
-def _ontology_dimension(sedo, text_a, text_b, layers, measure, fallback_a, fallback_b) -> float:
+def _ontology_dimension(sedo, text_a, text_b, layers, measure, fallback_a, fallback_b,
+                        concept_weights=None) -> float:
     """SEDO-grounded similarity for one dimension.
 
     When the ontology recognizes nothing on this dimension, the score drops
     (paper Sect. 5.5); with SEDO_FALLBACK_TOKENS it falls back to token Jaccard.
+
+    ``concept_weights`` (optional corpus-IDF map) down-weights ubiquitous concepts (P3.2).
     """
     concepts_a = {c for c in sedo.recognize(text_a) if sedo.nodes[c]["layer"] in layers}
     concepts_b = {c for c in sedo.recognize(text_b) if sedo.nodes[c]["layer"] in layers}
-    similarity = sedo.set_similarity(concepts_a, concepts_b, measure)
+    similarity = sedo.set_similarity(concepts_a, concepts_b, measure, concept_weights)
     if similarity is None:
         return jaccard(fallback_a, fallback_b) if SEDO_FALLBACK_TOKENS else 0.0
     return similarity
 
 
-def calculate_scores(a: Thesis, b: Thesis, lexical_model=None) -> dict:
+def _thesis_all_text(thesis) -> str:
+    """All text a thesis carries (content fields + classification tags) — used to measure how
+    often each ontology concept occurs across the corpus (for concept-IDF)."""
+    return _join(
+        thesis.title, thesis.scope, thesis.description, thesis.objectives, thesis.expected_result,
+        *(t.name for t in getattr(thesis, "technologies", [])),
+        *(s.name for s in getattr(thesis, "structures", [])),
+        *(d.name for d in getattr(thesis, "domains", [])),
+    )
+
+
+def build_concept_idf(theses: list) -> dict[str, float]:
+    """Corpus IDF for each SEDO concept: log((N+1)/(df+1))+1. Ubiquitous concepts (React, CRUD)
+    approach 1.0; rare ones (IoT, Blockchain) get a much larger weight (P3.2)."""
+    sedo = get_sedo()
+    total = len(theses)
+    document_frequency: dict[str, int] = {}
+    for thesis in theses:
+        for concept in sedo.recognize(_thesis_all_text(thesis)):
+            document_frequency[concept] = document_frequency.get(concept, 0) + 1
+    return {
+        concept: math.log((total + 1) / (count + 1)) + 1.0
+        for concept, count in document_frequency.items()
+    }
+
+
+def calculate_scores(a: Thesis, b: Thesis, lexical_model=None, concept_idf=None) -> dict:
     """Score one pair across the four MDDM dimensions.
 
     ``lexical_model`` is optional. Pass a fitted lexical scorer (``app.services.lexical
     .LexicalScorer``, duck-typed on ``.similarity``) for the paper's TF-IDF cosine; pass an IDF
     ``dict`` (legacy) or ``None`` to fall back to TF-IDF-weighted Jaccard on the surface tokens.
+
+    ``concept_idf`` (optional) is a corpus-IDF map from ``build_concept_idf`` used to down-weight
+    ubiquitous ontology concepts in the structural/domain dimensions (P3.2). Ignored when
+    CONCEPT_IDF_WEIGHTING is off or None.
     """
     sedo = get_sedo()
+    concept_weights = concept_idf if config.CONCEPT_IDF_WEIGHTING else None
 
-    # Semantic and lexical both read the title (paper §V-E); they differ in method:
-    # semantic = SBERT cosine (meaning), lexical = TF-IDF cosine over Module-1 folded terms.
-    surface_a = _surface_text(a)
-    surface_b = _surface_text(b)
-    lexical_tokens_a = tokenize(surface_a)
-    lexical_tokens_b = tokenize(surface_b)
+    # Semantic and lexical compare the FULL content when both topics have it, else fall back to the
+    # title (paper §V-E). semantic = SBERT cosine (meaning), lexical = TF-IDF cosine (Module-1 terms).
+    text_a, text_b = _pair_texts(a, b)
+    lexical_tokens_a = tokenize(text_a)
+    lexical_tokens_b = tokenize(text_b)
 
-    # Structural = tech stack + methodology, read from title + scope + description (+ tech/structure tags).
-    # The title is included so title-only topics (e.g. a freshly submitted proposal) still map into SEDO.
-    struct_text_a = _join(a.title, a.scope, a.description, *(t.name for t in a.technologies), *(s.name for s in a.structures))
-    struct_text_b = _join(b.title, b.scope, b.description, *(t.name for t in b.technologies), *(s.name for s in b.structures))
+    # Structural = tech stack + methodology, read from all content fields (+ tech/structure tags).
+    struct_text_a = _join(a.title, a.scope, a.description, a.objectives, a.expected_result,
+                          *(t.name for t in a.technologies), *(s.name for s in a.structures))
+    struct_text_b = _join(b.title, b.scope, b.description, b.objectives, b.expected_result,
+                          *(t.name for t in b.technologies), *(s.name for s in b.structures))
     struct_tokens_a = tokenize(struct_text_a)
     struct_tokens_b = tokenize(struct_text_b)
 
@@ -171,16 +246,17 @@ def calculate_scores(a: Thesis, b: Thesis, lexical_model=None) -> dict:
     domain_tokens_a = tokenize(domain_text_a)
     domain_tokens_b = tokenize(domain_text_b)
 
-    semantic = clamp(semantic_similarity(surface_a, surface_b))
+    semantic = clamp(semantic_similarity(text_a, text_b))
     if lexical_model is not None and hasattr(lexical_model, "similarity"):
-        lexical = clamp(lexical_model.similarity(surface_a, surface_b))
+        lexical = clamp(lexical_model.similarity(text_a, text_b))
     else:
         # Legacy / fallback: an IDF dict (or None) → TF-IDF-weighted Jaccard on surface tokens.
         idf = lexical_model if isinstance(lexical_model, dict) else None
         lexical = clamp(weighted_jaccard(lexical_tokens_a, lexical_tokens_b, idf))
     structure = clamp(
         _ontology_dimension(
-            sedo, struct_text_a, struct_text_b, _STRUCT_LAYERS, sedo.wu_palmer, struct_tokens_a, struct_tokens_b
+            sedo, struct_text_a, struct_text_b, _STRUCT_LAYERS, sedo.wu_palmer,
+            struct_tokens_a, struct_tokens_b, concept_weights
         )
     )
     domain = clamp(
@@ -192,6 +268,7 @@ def calculate_scores(a: Thesis, b: Thesis, lexical_model=None) -> dict:
             lambda c1, c2: sedo.wpath(c1, c2, WPATH_K),
             domain_tokens_a,
             domain_tokens_b,
+            concept_weights,
         )
     )
     overall = composite_score(semantic, lexical, structure, domain)
@@ -229,15 +306,23 @@ def calculate_similarity_for_new(db: Session, new_ids: list[uuid.UUID]) -> None:
     thesis_map = {thesis.thesis_id: thesis for thesis in all_theses}
     new_theses = [thesis_map[thesis_id] for thesis_id in new_ids if thesis_id in thesis_map]
 
-    # The lexical model (TF-IDF cosine) is corpus-level, so fit it once per run.
+    # Department policy: compare only against the N most-recent semesters (default 2). If no semester
+    # is parseable, fall back to the whole corpus so nothing silently drops out.
+    recent = _recent_semesters(all_theses, config.SIMILARITY_RECENT_SEMESTER_COUNT)
+    comparison_pool = [t for t in all_theses if t.semester in recent] if recent else all_theses
+    # Fit corpus-level models over the topics actually involved (pool + the new ones).
+    pool_ids = {t.thesis_id for t in comparison_pool}
+    corpus_for_models = comparison_pool + [t for t in new_theses if t.thesis_id not in pool_ids]
+
     # Lazy import avoids a module-level cycle (lexical → score_calculator).
     from app.services.lexical import build_lexical_scorer
 
-    lexical_model = build_lexical_scorer(all_theses)
+    lexical_model = build_lexical_scorer(corpus_for_models)
+    concept_idf = build_concept_idf(corpus_for_models)
 
     seen: set[tuple[uuid.UUID, uuid.UUID]] = set()
     for new_thesis in new_theses:
-        for other in all_theses:
+        for other in comparison_pool:
             if new_thesis.thesis_id == other.thesis_id:
                 continue
             thesis_a_id, thesis_b_id = sorted([new_thesis.thesis_id, other.thesis_id])
@@ -252,7 +337,7 @@ def calculate_similarity_for_new(db: Session, new_ids: list[uuid.UUID]) -> None:
             )
             if exists:
                 continue
-            scores = calculate_scores(new_thesis, other, lexical_model)
+            scores = calculate_scores(new_thesis, other, lexical_model, concept_idf)
             db.add(
                 Similarity(
                     thesis_a_id=thesis_a_id,

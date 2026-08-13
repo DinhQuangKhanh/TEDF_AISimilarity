@@ -46,10 +46,11 @@ def test_identical_topics_are_critical():
     assert scores["action"] == "Reject"
 
 
-def test_weights_match_paper():
-    # DASSF paper Eq. 1: alpha=0.30, beta=0.20, gamma=0.30, delta=0.20
-    assert WEIGHTS == {"semantic": 0.30, "lexical": 0.20, "structure": 0.30, "domain": 0.20}
+def test_weights_are_a_valid_distribution():
+    # WEIGHTS may be the paper default, a tuned file, or an env override — but is always a simplex point.
+    assert set(WEIGHTS) == {"semantic", "lexical", "structure", "domain"}
     assert round(sum(WEIGHTS.values()), 6) == 1.0
+    assert all(0.0 <= v <= 1.0 for v in WEIGHTS.values())
 
 
 def test_level_for_matches_table_3():

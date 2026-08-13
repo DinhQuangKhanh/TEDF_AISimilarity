@@ -27,17 +27,17 @@
     },
     "B4 DASSF (no ontology)": {
       "recall@1": 0.1186,
-      "recall@5": 0.4237,
-      "recall@10": 0.5254,
-      "mrr": 0.2582,
-      "auc": 0.8514
+      "recall@5": 0.3898,
+      "recall@10": 0.5932,
+      "mrr": 0.2443,
+      "auc": 0.8523
     },
     "Full DASSF": {
-      "recall@1": 0.1356,
-      "recall@5": 0.3898,
+      "recall@1": 0.1017,
+      "recall@5": 0.4237,
       "recall@10": 0.5424,
-      "mrr": 0.2653,
-      "auc": 0.8724
+      "mrr": 0.2486,
+      "auc": 0.8654
     }
   }
 }

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from app.core.logging import logger
 from app.services.preprocessing import analyze
-from app.utils.score_calculator import weighted_jaccard
+from app.utils.score_calculator import _content_text, weighted_jaccard
 from app.utils.text_cleaner import tokenize
 
 
@@ -69,11 +69,7 @@ def build_idf_from_texts(texts: list[str]) -> dict[str, float]:
 
 # Re-exported so callers can build a scorer straight from Thesis-like objects.
 def build_lexical_scorer(theses) -> LexicalScorer:
-    """Fit a LexicalScorer on the surface text (title) of each thesis-like object."""
-    texts = [(getattr(t, "title", None) or "").strip() or _fallback_text(t) for t in theses]
-    return LexicalScorer(texts)
-
-
-def _fallback_text(thesis) -> str:
-    parts = [getattr(thesis, f, None) for f in ("title", "description", "scope", "objectives", "expected_result")]
-    return " ".join(p for p in parts if p)
+    """Fit a LexicalScorer on the FULL content of each thesis-like object (title + fields), so the
+    vectorizer vocabulary matches the full-content text the scorer compares (P4). A title-only topic
+    contributes just its title."""
+    return LexicalScorer([_content_text(t) for t in theses])

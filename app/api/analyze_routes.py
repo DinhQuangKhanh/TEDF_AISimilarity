@@ -9,15 +9,13 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.models.thesis import Thesis
 from app.schemas.import_schema import ApiResponse
 from app.services.analyze_service import analyze_topic
+from app.services.corpus_loader import load_recent_capstone_corpus
 from app.services.lexical import build_lexical_scorer
 from app.services.semantic_encoder import backend_name
 
@@ -59,8 +57,10 @@ class _QueryTopic:
 
 
 @router.post("/api/v1/similarity/analyze", response_model=ApiResponse)
-def analyze(req: AnalyzeRequest, db: Session = Depends(get_db)):
-    corpus = db.query(Thesis).filter(Thesis.is_deleted.is_(False)).all()
+def analyze(req: AnalyzeRequest):
+    # Compare against the two most-recent semesters (Spring 2026 + Summer 2026), loaded full-content
+    # from the capstone JSON — no database needed for the demo (P4).
+    corpus = load_recent_capstone_corpus()
     lexical_model = build_lexical_scorer(corpus) if corpus else None
     result = analyze_topic(_QueryTopic(req), corpus, lexical_model, semantic_backend=backend_name())
     return ApiResponse(success=True, message="Analyzed", data=result)
