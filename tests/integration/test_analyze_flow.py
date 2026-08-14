@@ -36,7 +36,7 @@ def test_analyze_uses_recent_capstone_corpus_dbfree():
     assert 1 <= len(data["topMatches"]) <= 5
     top = data["topMatches"][0]
     assert set(top["breakdown"]) == {"semantic", "lexical", "structure", "domain"}
-    assert top["revision_suggestion"]
+    assert "revision_suggestion" not in top          # removed: editing is the proposer's job, not the evaluator's
     assert top["otherSemester"] in {"Spring 2026", "Summer 2026"}
     # matched topic content (side-by-side) + per-dimension highlight spans
     assert top["other"]["title"] and "title" in top["other"]

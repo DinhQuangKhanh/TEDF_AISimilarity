@@ -1,9 +1,12 @@
 """Module 4 decision support — the per-pair explanation report (DASSF paper §IV-A, §V-F).
 
-The paper requires every output to carry more than a score: a per-dimension breakdown, the
-*specific* overlapping SEDO concepts that drove the decision, and a concrete revision suggestion
-(e.g. "swap the technology stack" for a structural-duplication Critical). ``build_explanation``
-produces exactly that structured report for one pair of topics.
+Every output carries more than a score: a per-dimension breakdown, the *specific* overlapping SEDO
+concepts that drove the decision, and human-readable reasons. ``build_explanation`` produces that
+structured report for one pair of topics.
+
+Note: a per-topic "revision suggestion" was intentionally removed — editing a topic is the proposing
+lecturer's job, not the evaluator's. The evaluator-facing narrative is the per-field "explain
+duplication" feature (``explain_service.py``).
 """
 
 from __future__ import annotations
@@ -25,36 +28,6 @@ def _text(thesis, *fields: str) -> str:
 
 def _shared(a_ids: set[str], b_ids: set[str]) -> list[str]:
     return concept_names(a_ids & b_ids)
-
-
-def _revision_suggestion(structure: float, domain: float, semantic: float, lexical: float,
-                         shared_tech: list[str], shared_domain: list[str], other_title: str | None) -> str:
-    """A concrete, human-readable next step for the student (paper §V-F)."""
-    reference = f'"{other_title}"' if other_title else "the matched topic"
-    if is_structural_duplication(structure, domain):
-        stack = ", ".join(shared_tech) if shared_tech else "the same technology stack"
-        return (
-            f"Structural duplication with {reference}: it reuses the same architecture ({stack}) and "
-            f"only changes the business domain. Recommend a different technical approach or a new "
-            f"technical contribution — not merely swapping the domain."
-        )
-    if structure >= TAU_STR and domain >= 0.5:
-        return (
-            f"Overlaps {reference} in BOTH architecture and business domain. Recommend rethinking the "
-            f"problem, scope, or the intended contribution to establish clear novelty."
-        )
-    if max(semantic, lexical) >= 0.65 and structure < TAU_STR:
-        return (
-            f"Wording/meaning is close to {reference}. Recommend narrowing the scope or clarifying what "
-            f"is genuinely new relative to it."
-        )
-    if domain >= 0.5 and structure < TAU_STR:
-        domains = ", ".join(shared_domain) if shared_domain else "the same business domain"
-        return (
-            f"Same business domain as {reference} ({domains}) but a different stack — usually acceptable; "
-            f"confirm the contribution is distinct."
-        )
-    return "Sufficiently distinct from existing topics; no revision required."
 
 
 def build_explanation(a, b, scores: dict) -> dict:
@@ -110,7 +83,4 @@ def build_explanation(a, b, scores: dict) -> dict:
         "thresholds": {"structural_tau_str": TAU_STR, "structural_tau_dom": TAU_DOM},
         "shared_concepts": {"tech": shared_tech, "domain": shared_domain, "task": shared_task},
         "reasons": reasons,
-        "revision_suggestion": _revision_suggestion(
-            structure, domain, semantic, lexical, shared_tech, shared_domain, getattr(b, "title", None)
-        ),
     }
