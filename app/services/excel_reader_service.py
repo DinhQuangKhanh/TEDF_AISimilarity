@@ -4,6 +4,9 @@ import pandas as pd
 
 from app.utils.text_cleaner import clean_text, normalize_key
 
+# A header cell is a short label; anything longer is prose and never a header.
+MAX_HEADER_CELL_LENGTH = 50
+
 HEADER_ALIASES = {
     "title": ["title", "title en", "english title", "project title", "tên đề tài", "ten de tai", "de tai"],
     "description": ["description", "summary", "mô tả", "mo ta"],
@@ -18,21 +21,38 @@ HEADER_ALIASES = {
 
 
 class ExcelReaderService:
+    def _match_field(self, value: str) -> str | None:
+        """Which field a header cell names, or None.
+
+        Header cells are short labels, never prose: a 1000-character description
+        would otherwise match half the aliases by substring and outscore the real
+        header row. Exact matches win over substring matches.
+        """
+        if not value or len(value) > MAX_HEADER_CELL_LENGTH:
+            return None
+        for field, aliases in HEADER_ALIASES.items():
+            if any(alias == value for alias in aliases):
+                return field
+        for field, aliases in HEADER_ALIASES.items():
+            if any(alias in value for alias in aliases):
+                return field
+        return None
+
     def _score_header_row(self, row_values: list[object]) -> int:
-        normalized = [normalize_key(value) for value in row_values]
-        score = 0
-        for value in normalized:
-            for aliases in HEADER_ALIASES.values():
-                if any(alias in value for alias in aliases):
-                    score += 1
-        return score
+        # Count DISTINCT fields so one cell cannot inflate the score.
+        fields = {
+            field
+            for value in row_values
+            if (field := self._match_field(normalize_key(value))) is not None
+        }
+        return len(fields)
 
     def _detect_header(self, frame: pd.DataFrame) -> int:
         best_row = 0
         best_score = -1
         for idx in range(min(len(frame), 10)):
             score = self._score_header_row(frame.iloc[idx].tolist())
-            if score > best_score:
+            if score > best_score:  # ties keep the earliest row
                 best_score = score
                 best_row = idx
         return best_row
@@ -40,11 +60,9 @@ class ExcelReaderService:
     def _map_headers(self, headers: list[object]) -> dict[int, str]:
         mapped = {}
         for idx, header in enumerate(headers):
-            key = normalize_key(header)
-            for field, aliases in HEADER_ALIASES.items():
-                if any(alias in key for alias in aliases):
-                    mapped[idx] = field
-                    break
+            field = self._match_field(normalize_key(header))
+            if field:
+                mapped[idx] = field
         return mapped
 
     def parse(self, content: bytes) -> list[dict]:
