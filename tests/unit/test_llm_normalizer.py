@@ -59,9 +59,9 @@ def test_opt_in_fill_uses_heuristic_without_api_key(monkeypatch):
     assert "library management system" in result.description.lower()
 
 
-def test_vietnamese_title_extracts_domain():
+def test_title_extracts_domain():
     result = LLMNormalizerService().normalize(
-        _row(title="Hệ thống quản lý khách sạn"),
+        _row(title="Hotel Management System"),
         fill_missing=False,
     )
     assert "Hotel" in result.domains

@@ -90,7 +90,7 @@ def test_full_pipeline_returns_ranked_matches():
     for m in matches:
         assert set(m["breakdown"]) == {"semantic", "lexical", "structure", "domain"}
         assert m["level"] in {"Low", "Moderate", "High", "Critical"}
-        assert m["revision_suggestion"]
+        assert "revision_suggestion" not in m
         assert "otherTitle" in m
 
 

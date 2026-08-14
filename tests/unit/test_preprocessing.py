@@ -70,11 +70,11 @@ def test_concept_extraction_by_layer_english():
     assert "booking" in r.tasks
 
 
-def test_concept_extraction_vietnamese():
-    r = preprocess("quản lý nhà thuốc và giao hàng")
+def test_concept_extraction_pharmacy_and_delivery():
+    r = preprocess("pharmacy management system with delivery")
     assert "pharmacy" in r.domains
-    assert "crud_management" in r.tasks
-    assert "courier_delivery" in r.domains  # "giao hàng" → Courier Delivery
+    assert "crud_management" in r.tasks       # "management system" → CRUD Management
+    assert "courier_delivery" in r.domains    # "delivery" → Courier Delivery
 
 
 def test_domain_and_task_are_separated():

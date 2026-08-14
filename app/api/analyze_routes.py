@@ -66,6 +66,41 @@ def analyze(req: AnalyzeRequest):
     return ApiResponse(success=True, message="Analyzed", data=result)
 
 
+class TopicFields(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    scope: str | None = None
+    objectives: str | None = None
+    expected_result: str | None = None
+    technologies: list[str] = []
+
+
+class ExplainRequest(BaseModel):
+    query: TopicFields
+    match: TopicFields
+
+
+def _topic_from_fields(fields: TopicFields) -> _QueryTopic:
+    return _QueryTopic(AnalyzeRequest(
+        title=fields.title or "",
+        description=fields.description,
+        scope=fields.scope,
+        objectives=fields.objectives,
+        expected_result=fields.expected_result,
+        technologies=fields.technologies,
+    ))
+
+
+@router.post("/api/v1/similarity/explain", response_model=ApiResponse)
+def explain_route(req: ExplainRequest):
+    # Per-field "explain duplication": recomputes the SAME highlights as /analyze for this one pair,
+    # then phrases each field's overlap (LLM if available, else a grounded template). No persistence.
+    from app.services.explain_service import explain
+
+    fields = explain(_topic_from_fields(req.query), _topic_from_fields(req.match))
+    return ApiResponse(success=True, message="Explained", data={"fields": fields})
+
+
 @router.get("/demo", include_in_schema=False)
 def demo_page():
     if not os.path.exists(_DEMO_HTML):

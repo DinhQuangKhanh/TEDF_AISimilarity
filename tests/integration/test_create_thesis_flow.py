@@ -97,7 +97,7 @@ def test_explain_endpoint_returns_full_report():
     data = response.json()["data"]
     assert set(data["breakdown"]) == {"semantic", "lexical", "structure", "domain"}
     assert data["action"]
-    assert data["revision_suggestion"]
+    assert "revision_suggestion" not in data
     # Hotel vs Pharmacy on the same stack → the paper's structural-duplication case.
     assert data["is_structural_duplication"] is True
     assert "React" in data["shared_concepts"]["tech"]
