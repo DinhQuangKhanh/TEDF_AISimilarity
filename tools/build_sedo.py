@@ -2,8 +2,8 @@
 
 SEDO (paper §V-D) is a four-layer SE ontology: Technical Stack · Methodology · Domain
 Entity · Task Type. Only the ``isA`` (parent) relation is used by the similarity measures
-in ``app/ontology/sedo.py`` (Wu-Palmer, wpath). Concepts carry surface ``keywords`` — both
-English and Vietnamese — that Module-1 NER matches against a title.
+in ``app/ontology/sedo.py`` (Wu-Palmer, wpath). Concepts carry surface ``keywords`` (English
+only — duplicate checking runs on English content) that Module-1 NER matches against a title.
 
 The paper says SEDO "grows iteratively as the evaluation phase surfaces missing concepts",
 so keeping the ontology as a spec + generator (rather than hand-edited JSON) makes that growth
@@ -13,7 +13,7 @@ cheap and keeps the file consistent. Edit ``SPEC`` below, then run:
 
 Spec format — a nested tree of ``name: (keywords, children)``:
     "React": (["react", "reactjs", "react.js"], {})           # leaf
-    "Frontend": (["frontend", "giao diện"], { ...children... }) # parent
+    "Frontend": (["frontend", "front-end"], { ...children... }) # parent
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import re
 
 # ── Layer 1: Technical Stack ────────────────────────────────────────────────────────
 TECH = {
-    "Frontend": (["frontend", "front-end", "giao diện", "client side"], {
+    "Frontend": (["frontend", "front-end", "client side"], {
         "React": (["react", "reactjs", "react.js", "reactts", "react system"], {}),
         "Angular": (["angular", "angularjs"], {}),
         "Vue": (["vue", "vuejs", "vue.js"], {}),
@@ -35,7 +35,7 @@ TECH = {
         "Tailwind CSS": (["tailwind", "tailwindcss"], {}),
         "Vite": (["vite"], {}),
     }),
-    "Backend": (["backend", "back-end", "server side", "máy chủ"], {
+    "Backend": (["backend", "back-end", "server side"], {
         "Node.js": (["node.js", "nodejs", "node js", "express", "express.js", "expressjs"], {}),
         "NestJS": (["nestjs", "nest.js", "nest js"], {}),
         "Spring Boot": (["spring boot", "spring", "java spring", "spring mvc"], {}),
@@ -45,7 +45,7 @@ TECH = {
         "FastAPI": (["fastapi", "fast api"], {}),
         "Laravel": (["laravel", "php laravel", "php"], {}),
     }),
-    "Database": (["database", "cơ sở dữ liệu", "csdl"], {
+    "Database": (["database"], {
         "PostgreSQL": (["postgresql", "postgres", "psql", "pgvector"], {}),
         "MySQL": (["mysql", "mariadb"], {}),
         "MongoDB": (["mongodb", "mongo", "nosql", "mongoose", "mongodb atlas"], {}),
@@ -54,7 +54,7 @@ TECH = {
         "Firebase": (["firebase", "firestore", "firebase database"], {}),
         "Supabase": (["supabase"], {}),
     }),
-    "Mobile": (["mobile", "di động", "mobile app", "ứng dụng di động"], {
+    "Mobile": (["mobile", "mobile app"], {
         "Flutter": (["flutter", "dart flutter", "dart"], {}),
         "React Native": (["react native", "reactnative", "expo"], {}),
         "Android": (["android", "kotlin"], {}),
@@ -66,18 +66,18 @@ TECH = {
         "CI/CD Pipeline": (["jenkins", "github actions", "gitlab ci", "pipeline"], {}),
         "Cloud": (["aws", "amazon web services", "azure", "vercel", "render", "cloud", "nginx", "vps"], {}),
     }),
-    "Integration": (["integration", "tích hợp"], {
+    "Integration": (["integration"], {
         "REST API": (["rest api", "rest", "restful", "web service"], {}),
         "GraphQL": (["graphql", "graph ql"], {}),
         "gRPC": (["grpc"], {}),
-        "Realtime": (["websocket", "signalr", "socket.io", "socketio", "realtime", "thời gian thực"], {}),
+        "Realtime": (["websocket", "signalr", "socket.io", "socketio", "realtime"], {}),
         "Message Queue": (["kafka", "rabbitmq", "message queue", "message broker"], {}),
     }),
-    "AI/ML": (["ai", "artificial intelligence", "trí tuệ nhân tạo", "machine learning", "học máy"], {
+    "AI/ML": (["ai", "artificial intelligence", "machine learning"], {
         "Machine Learning": (["machine learning", "scikit-learn", "sklearn", "xgboost", "prediction model", "forecasting model"], {}),
-        "Deep Learning": (["deep learning", "neural network", "pytorch", "tensorflow", "học sâu"], {}),
+        "Deep Learning": (["deep learning", "neural network", "pytorch", "tensorflow"], {}),
         "NLP": (["nlp", "natural language processing", "sentiment analysis", "text analysis"], {}),
-        "Computer Vision": (["computer vision", "image recognition", "object detection", "thị giác máy tính"], {}),
+        "Computer Vision": (["computer vision", "image recognition", "object detection"], {}),
         "LLM/RAG": (["llm", "rag", "langchain", "openai", "gemini", "chatbot", "generative ai", "large language model"], {}),
         "OCR": (["ocr", "tesseract", "optical character recognition"], {}),
     }),
@@ -85,136 +85,136 @@ TECH = {
 
 # ── Layer 2: Domain Entity (business domains) ───────────────────────────────────────
 DOMAIN = {
-    "Hospitality": (["hospitality", "lưu trú"], {
-        "Hotel": (["hotel", "khách sạn", "lodging"], {}),
-        "Restaurant": (["restaurant", "nhà hàng", "dining", "canteen", "căng tin", "food ordering"], {}),
-        "Homestay": (["homestay", "guest house", "nhà nghỉ"], {}),
-        "Tourism": (["tourism", "travel", "du lịch", "tour", "itinerary", "waterway tourism", "eco-tourism"], {}),
-        "Coworking Space": (["coworking", "co-working", "workspace booking", "không gian làm việc"], {}),
+    "Hospitality": (["hospitality"], {
+        "Hotel": (["hotel", "lodging"], {}),
+        "Restaurant": (["restaurant", "dining", "canteen", "food ordering"], {}),
+        "Homestay": (["homestay", "guest house"], {}),
+        "Tourism": (["tourism", "travel", "tour", "itinerary", "waterway tourism", "eco-tourism"], {}),
+        "Coworking Space": (["coworking", "co-working", "workspace booking"], {}),
     }),
-    "Healthcare": (["healthcare", "y tế", "medical", "chăm sóc sức khỏe"], {
-        "Hospital": (["hospital", "bệnh viện"], {}),
-        "Clinic": (["clinic", "phòng khám", "outpatient", "medical appointment", "đặt lịch khám"], {}),
-        "Pharmacy": (["pharmacy", "nhà thuốc", "drugstore", "medicine", "medication"], {}),
-        "Laboratory": (["laboratory", "lab", "diagnostics", "xét nghiệm"], {}),
-        "Mental Health": (["mental health", "psychology", "sức khỏe tâm thần", "tâm lý"], {}),
-        "Veterinary": (["veterinary", "pet", "thú y", "thú cưng"], {}),
-        "Elderly Care": (["elderly", "elderly care", "người cao tuổi", "chăm sóc người già"], {}),
-        "Disease Diagnosis": (["diagnosis", "disease detection", "chẩn đoán bệnh", "pulmonary", "lung disease"], {}),
+    "Healthcare": (["healthcare", "medical"], {
+        "Hospital": (["hospital"], {}),
+        "Clinic": (["clinic", "outpatient", "medical appointment"], {}),
+        "Pharmacy": (["pharmacy", "drugstore", "medicine", "medication"], {}),
+        "Laboratory": (["laboratory", "lab", "diagnostics"], {}),
+        "Mental Health": (["mental health", "psychology"], {}),
+        "Veterinary": (["veterinary", "pet"], {}),
+        "Elderly Care": (["elderly", "elderly care"], {}),
+        "Disease Diagnosis": (["diagnosis", "disease detection", "pulmonary", "lung disease"], {}),
     }),
-    "Education": (["education", "giáo dục", "learning", "học tập", "e-learning"], {
-        "School": (["school", "trường học", "k12", "preschool", "kindergarten", "mầm non"], {}),
-        "University": (["university", "campus", "higher education", "đại học", "fpt university"], {}),
-        "Course": (["course", "e-learning", "online learning", "lms", "khóa học", "học trực tuyến"], {}),
-        "Library": (["library", "thư viện", "book borrowing"], {}),
-        "Tutoring": (["tutoring", "tutor", "gia sư", "dạy kèm", "mentor connectivity"], {}),
-        "Language Learning": (["language learning", "english learning", "japanese", "korean", "học ngoại ngữ", "vocabulary"], {}),
-        "Exam": (["exam", "quiz", "examination", "thi cử", "online judge", "test management"], {}),
-        "Dormitory": (["dormitory", "dorm", "ký túc xá"], {}),
-        "Alumni": (["alumni", "cựu sinh viên"], {}),
-        "Academic Management": (["academic management", "student management", "training point", "student club", "quản lý học vụ"], {}),
+    "Education": (["education", "learning", "e-learning"], {
+        "School": (["school", "k12", "preschool", "kindergarten"], {}),
+        "University": (["university", "campus", "higher education", "fpt university"], {}),
+        "Course": (["course", "e-learning", "online learning", "lms"], {}),
+        "Library": (["library", "book borrowing"], {}),
+        "Tutoring": (["tutoring", "tutor", "mentor connectivity"], {}),
+        "Language Learning": (["language learning", "english learning", "japanese", "korean", "vocabulary"], {}),
+        "Exam": (["exam", "quiz", "examination", "online judge", "test management"], {}),
+        "Dormitory": (["dormitory", "dorm"], {}),
+        "Alumni": (["alumni"], {}),
+        "Academic Management": (["academic management", "student management", "training point", "student club"], {}),
     }),
-    "Retail": (["retail", "bán lẻ", "shop", "cửa hàng"], {
+    "Retail": (["retail", "shop"], {
         "Store": (["store", "shop", "retail store"], {}),
-        "Marketplace": (["marketplace", "e-commerce", "ecommerce", "online market", "thương mại điện tử", "sàn giao dịch"], {}),
-        "Inventory": (["inventory", "stock management", "kho hàng", "tồn kho"], {}),
+        "Marketplace": (["marketplace", "e-commerce", "ecommerce", "online market"], {}),
+        "Inventory": (["inventory", "stock management"], {}),
         "Product Catalog": (["product catalog", "catalogue", "product listing"], {}),
-        "Fashion": (["fashion", "clothing", "outfit", "uniform", "thời trang", "quần áo", "costume"], {}),
-        "Second-hand": (["second-hand", "secondhand", "used products", "đồ cũ", "hàng cũ"], {}),
-        "Print-on-Demand": (["print-on-demand", "pod", "custom artwork", "in theo yêu cầu"], {}),
-        "Bookstore": (["bookstore", "book commerce", "nhà sách", "hiệu sách"], {}),
+        "Fashion": (["fashion", "clothing", "outfit", "uniform", "costume"], {}),
+        "Second-hand": (["second-hand", "secondhand", "used products"], {}),
+        "Print-on-Demand": (["print-on-demand", "pod", "custom artwork"], {}),
+        "Bookstore": (["bookstore", "book commerce"], {}),
     }),
-    "Food & Beverage": (["food", "beverage", "thực phẩm", "đồ ăn"], {
-        "Meal Service": (["meal", "school lunch", "canteen meal", "bữa ăn", "suất ăn"], {}),
-        "Food Delivery": (["food delivery", "giao đồ ăn", "đặt món"], {}),
-        "Nutrition": (["nutrition", "dinh dưỡng", "diet"], {}),
-        "Seafood Supply": (["seafood", "hải sản", "seafood supply"], {}),
+    "Food & Beverage": (["food", "beverage"], {
+        "Meal Service": (["meal", "school lunch", "canteen meal"], {}),
+        "Food Delivery": (["food delivery"], {}),
+        "Nutrition": (["nutrition", "diet"], {}),
+        "Seafood Supply": (["seafood", "seafood supply"], {}),
     }),
-    "Finance": (["finance", "tài chính", "fintech"], {
-        "Bank": (["bank", "banking", "ngân hàng", "core banking"], {}),
-        "Wallet": (["wallet", "e-wallet", "payment wallet", "ví điện tử"], {}),
-        "Loan": (["loan", "lending", "credit", "vay", "tín dụng"], {}),
-        "Personal Finance": (["personal finance", "expense", "bill splitting", "quản lý chi tiêu", "chia hóa đơn"], {}),
-        "Stock Trading": (["stock", "stock trading", "paper trading", "chứng khoán", "đầu tư"], {}),
+    "Finance": (["finance", "fintech"], {
+        "Bank": (["bank", "banking", "core banking"], {}),
+        "Wallet": (["wallet", "e-wallet", "payment wallet"], {}),
+        "Loan": (["loan", "lending", "credit"], {}),
+        "Personal Finance": (["personal finance", "expense", "bill splitting"], {}),
+        "Stock Trading": (["stock", "stock trading", "paper trading"], {}),
     }),
-    "Transportation": (["transportation", "giao thông", "vận tải", "mobility"], {
-        "Parking": (["parking", "parking lot", "bãi đỗ xe", "đỗ xe"], {}),
-        "Ride-hailing": (["ride-hailing", "ride sharing", "taxi booking", "personal driver", "gọi xe", "tài xế"], {}),
-        "Bicycle Rental": (["bicycle rental", "bike rental", "bike sharing", "thuê xe đạp"], {}),
-        "Bus": (["bus", "bus tracking", "public transport", "xe buýt", "giao thông công cộng"], {}),
-        "Freight Transport": (["freight", "pickup truck", "mass transportation", "cargo transport", "vận chuyển hàng"], {}),
-        "Car Rental": (["car rental", "vehicle rental", "self-driving rental", "thuê xe"], {}),
-        "Driving School": (["driving training", "driving school", "đào tạo lái xe", "học lái xe"], {}),
+    "Transportation": (["transportation", "mobility"], {
+        "Parking": (["parking", "parking lot"], {}),
+        "Ride-hailing": (["ride-hailing", "ride sharing", "taxi booking", "personal driver"], {}),
+        "Bicycle Rental": (["bicycle rental", "bike rental", "bike sharing"], {}),
+        "Bus": (["bus", "bus tracking", "public transport"], {}),
+        "Freight Transport": (["freight", "pickup truck", "mass transportation", "cargo transport"], {}),
+        "Car Rental": (["car rental", "vehicle rental", "self-driving rental"], {}),
+        "Driving School": (["driving training", "driving school"], {}),
     }),
-    "Real Estate": (["real estate", "realestate", "bất động sản"], {
-        "Apartment": (["apartment", "condo", "chung cư", "căn hộ", "property operation"], {}),
+    "Real Estate": (["real estate", "realestate"], {
+        "Apartment": (["apartment", "condo", "property operation"], {}),
         "Property Listing": (["property listing", "real estate listing", "property portal", "rental listing"], {}),
-        "Roommate Finder": (["roommate", "roommate finder", "tìm bạn ở ghép", "spare room"], {}),
+        "Roommate Finder": (["roommate", "roommate finder", "spare room"], {}),
     }),
-    "Human Resources": (["human resources", "nhân sự", "hr"], {
-        "Employee": (["employee", "staff", "nhân viên", "employee management"], {}),
-        "Recruitment": (["recruitment", "hiring", "cv screening", "job board", "applicant tracking", "tuyển dụng", "cv"], {}),
-        "Payroll": (["payroll", "salary", "wage", "lương"], {}),
-        "Freelancer": (["freelancer", "gig", "freelance", "việc tự do", "bidding job"], {}),
-        "Internship": (["internship", "ojt", "on-the-job training", "thực tập"], {}),
+    "Human Resources": (["human resources", "hr"], {
+        "Employee": (["employee", "staff", "employee management"], {}),
+        "Recruitment": (["recruitment", "hiring", "cv screening", "job board", "applicant tracking", "cv"], {}),
+        "Payroll": (["payroll", "salary", "wage"], {}),
+        "Freelancer": (["freelancer", "gig", "freelance", "bidding job"], {}),
+        "Internship": (["internship", "ojt", "on-the-job training"], {}),
     }),
-    "Government": (["government", "chính phủ", "public sector", "hành chính"], {
-        "Citizen": (["citizen", "resident", "công dân", "cư dân"], {}),
-        "License": (["license", "licensing", "certificate", "giấy phép", "chứng chỉ"], {}),
-        "Permit": (["permit", "permit management", "approval", "phê duyệt"], {}),
-        "Legal Compliance": (["legal", "legal compliance", "law", "pháp lý", "tuân thủ"], {}),
+    "Government": (["government", "public sector"], {
+        "Citizen": (["citizen", "resident"], {}),
+        "License": (["license", "licensing", "certificate"], {}),
+        "Permit": (["permit", "permit management", "approval"], {}),
+        "Legal Compliance": (["legal", "legal compliance", "law"], {}),
     }),
-    "Entertainment": (["entertainment", "giải trí"], {
-        "Movie": (["movie", "cinema", "film", "phim", "rạp chiếu"], {}),
-        "Event": (["event", "event management", "conference", "sự kiện", "hội nghị"], {}),
-        "Ticket": (["ticket", "ticketing", "booking ticket", "vé", "đặt vé"], {}),
-        "Game": (["game", "rpg", "roguelite", "unity", "photon", "detective game", "trò chơi"], {}),
-        "Music": (["music", "music collaboration", "âm nhạc", "music producer"], {}),
+    "Entertainment": (["entertainment"], {
+        "Movie": (["movie", "cinema", "film"], {}),
+        "Event": (["event", "event management", "conference"], {}),
+        "Ticket": (["ticket", "ticketing", "booking ticket"], {}),
+        "Game": (["game", "rpg", "roguelite", "unity", "photon", "detective game"], {}),
+        "Music": (["music", "music collaboration", "music producer"], {}),
     }),
-    "Agriculture": (["agriculture", "nông nghiệp"], {
-        "Farm": (["farm", "farming", "farm management", "nông trại", "trang trại"], {}),
-        "Crop": (["crop", "crop management", "harvest", "cây trồng", "mùa vụ"], {}),
-        "Smart Garden": (["smart garden", "garden monitoring", "greenhouse", "vườn thông minh", "nhà kính"], {}),
+    "Agriculture": (["agriculture"], {
+        "Farm": (["farm", "farming", "farm management"], {}),
+        "Crop": (["crop", "crop management", "harvest"], {}),
+        "Smart Garden": (["smart garden", "garden monitoring", "greenhouse"], {}),
     }),
-    "Logistics": (["logistics", "hậu cần", "chuỗi cung ứng"], {
-        "Warehouse": (["warehouse", "depot", "storage", "kho bãi", "nhà kho"], {}),
-        "Shipment": (["shipment", "freight", "cargo", "lô hàng"], {}),
-        "Courier Delivery": (["delivery", "last mile", "courier", "delivery locker", "giao hàng", "chuyển phát"], {}),
-        "Supply Chain": (["supply chain", "chuỗi cung ứng", "orchestration", "procurement"], {}),
+    "Logistics": (["logistics"], {
+        "Warehouse": (["warehouse", "depot", "storage"], {}),
+        "Shipment": (["shipment", "freight", "cargo"], {}),
+        "Courier Delivery": (["delivery", "last mile", "courier", "delivery locker"], {}),
+        "Supply Chain": (["supply chain", "orchestration", "procurement"], {}),
     }),
-    "Sports & Fitness": (["sports", "fitness", "thể thao", "thể hình"], {
-        "Gym": (["gym", "fitness center", "phòng gym", "phòng tập"], {}),
-        "Sports Field": (["sports field", "field booking", "coach", "sân thể thao", "đặt sân", "huấn luyện viên"], {}),
+    "Sports & Fitness": (["sports", "fitness"], {
+        "Gym": (["gym", "fitness center"], {}),
+        "Sports Field": (["sports field", "field booking", "coach"], {}),
     }),
-    "Home Services": (["home service", "dịch vụ gia đình"], {
-        "Repair Service": (["repair", "maintenance service", "home repair", "sửa chữa"], {}),
-        "Construction": (["construction", "construction supervision", "xây dựng", "giám sát công trình"], {}),
-        "Moving Service": (["moving", "furniture moving", "chuyển nhà", "dọn nhà"], {}),
-        "Domestic Help": (["domestic helper", "housekeeping", "giúp việc", "người giúp việc"], {}),
+    "Home Services": (["home service"], {
+        "Repair Service": (["repair", "maintenance service", "home repair"], {}),
+        "Construction": (["construction", "construction supervision"], {}),
+        "Moving Service": (["moving", "furniture moving"], {}),
+        "Domestic Help": (["domestic helper", "housekeeping"], {}),
     }),
-    "Environment & Energy": (["environment", "energy", "môi trường", "năng lượng"], {
-        "Waste Management": (["waste", "waste monitoring", "rác thải", "quản lý rác"], {}),
-        "Weather & Disaster": (["weather", "flood monitoring", "disaster", "thời tiết", "lũ lụt", "cảnh báo thiên tai"], {}),
-        "Emission & Power": (["greenhouse gas", "emission", "thermal power", "khí thải", "nhà máy điện"], {}),
-        "Seaport Operations": (["seaport", "port operations", "cảng biển", "vận hành cảng"], {}),
+    "Environment & Energy": (["environment", "energy"], {
+        "Waste Management": (["waste", "waste monitoring"], {}),
+        "Weather & Disaster": (["weather", "flood monitoring", "disaster"], {}),
+        "Emission & Power": (["greenhouse gas", "emission", "thermal power"], {}),
+        "Seaport Operations": (["seaport", "port operations"], {}),
     }),
-    "Social & Community": (["social", "community", "cộng đồng", "xã hội"], {
-        "Social Network": (["social network", "connection platform", "mạng xã hội", "kết nối"], {}),
-        "Family Tree": (["family tree", "genealogy", "gia phả"], {}),
-        "Lost & Found": (["lost and found", "lost & found", "đồ thất lạc"], {}),
-        "Charity": (["charity", "volunteering", "rescue", "từ thiện", "tình nguyện", "cứu trợ"], {}),
+    "Social & Community": (["social", "community"], {
+        "Social Network": (["social network", "connection platform"], {}),
+        "Family Tree": (["family tree", "genealogy"], {}),
+        "Lost & Found": (["lost and found", "lost & found"], {}),
+        "Charity": (["charity", "volunteering", "rescue"], {}),
     }),
-    "Automotive": (["automotive", "ô tô", "xe hơi"], {
-        "Garage": (["garage", "auto repair", "gara", "sửa xe"], {}),
-        "Vehicle Service": (["vehicle service", "car maintenance", "bảo dưỡng xe"], {}),
+    "Automotive": (["automotive"], {
+        "Garage": (["garage", "auto repair"], {}),
+        "Vehicle Service": (["vehicle service", "car maintenance"], {}),
     }),
-    "Smart Home & IoT": (["smart home", "iot", "internet of things", "nhà thông minh"], {
-        "Home Automation": (["home automation", "smart device", "raspberry pi", "edge computing", "thiết bị thông minh"], {}),
-        "Delivery Locker": (["smart locker", "delivery locker", "tủ khóa thông minh"], {}),
+    "Smart Home & IoT": (["smart home", "iot", "internet of things"], {
+        "Home Automation": (["home automation", "smart device", "raspberry pi", "edge computing"], {}),
+        "Delivery Locker": (["smart locker", "delivery locker"], {}),
     }),
-    "Project & Work Management": (["project management", "quản lý dự án", "work management"], {
-        "Task Management": (["task management", "task assignment", "quản lý công việc", "giao việc"], {}),
-        "Business Analysis": (["business analyst", "requirement clarification", "phân tích nghiệp vụ"], {}),
+    "Project & Work Management": (["project management", "work management"], {
+        "Task Management": (["task management", "task assignment"], {}),
+        "Business Analysis": (["business analyst", "requirement clarification"], {}),
     }),
 }
 
@@ -225,27 +225,27 @@ METHOD = {
     "Waterfall": (["waterfall", "waterfall model"], {}),
     "Kanban": (["kanban", "kanban board"], {}),
     "TDD": (["tdd", "test driven"], {}),
-    "Microservices": (["microservices", "microservice", "vi dịch vụ"], {}),
+    "Microservices": (["microservices", "microservice"], {}),
     "Monolith": (["monolith", "monolithic"], {}),
     "MVC": (["mvc", "model view controller"], {}),
     "Clean Architecture": (["clean architecture", "domain driven design", "ddd", "cqrs"], {}),
-    "SaaS": (["saas", "software as a service", "multi-tenant", "đa người thuê"], {}),
+    "SaaS": (["saas", "software as a service", "multi-tenant"], {}),
 }
 
 # ── Layer 4: Task Type ──────────────────────────────────────────────────────────────
 TASK = {
-    "CRUD Management": (["crud management", "crud", "management system", "quản lý"], {}),
-    "Booking": (["booking", "reservation", "appointment", "đặt lịch", "đặt chỗ"], {}),
-    "Recommendation": (["recommendation", "recommender", "suggestion", "gợi ý", "đề xuất"], {}),
-    "Analytics": (["analytics", "reporting", "dashboard", "báo cáo", "thống kê", "insight"], {}),
-    "Authentication": (["authentication", "login", "auth", "đăng nhập", "xác thực"], {}),
-    "Tracking & Monitoring": (["tracking", "monitoring", "real-time tracking", "theo dõi", "giám sát"], {}),
-    "Matching & Connecting": (["matching", "connecting", "connect", "kết nối", "ghép nối"], {}),
-    "Prediction & Forecasting": (["prediction", "forecasting", "risk calculation", "dự đoán", "dự báo"], {}),
-    "Chatbot & Assistant": (["chatbot", "virtual assistant", "ai assistant", "trợ lý ảo"], {}),
-    "Search": (["search", "search engine", "tìm kiếm"], {}),
-    "Notification": (["notification", "alert", "reminder", "thông báo", "nhắc nhở"], {}),
-    "Payment Processing": (["payment", "online payment", "checkout", "thanh toán", "vnpay", "payos", "momo"], {}),
+    "CRUD Management": (["crud management", "crud", "management system"], {}),
+    "Booking": (["booking", "reservation", "appointment"], {}),
+    "Recommendation": (["recommendation", "recommender", "suggestion"], {}),
+    "Analytics": (["analytics", "reporting", "dashboard", "insight"], {}),
+    "Authentication": (["authentication", "login", "auth"], {}),
+    "Tracking & Monitoring": (["tracking", "monitoring", "real-time tracking"], {}),
+    "Matching & Connecting": (["matching", "connecting", "connect"], {}),
+    "Prediction & Forecasting": (["prediction", "forecasting", "risk calculation"], {}),
+    "Chatbot & Assistant": (["chatbot", "virtual assistant", "ai assistant"], {}),
+    "Search": (["search", "search engine"], {}),
+    "Notification": (["notification", "alert", "reminder"], {}),
+    "Payment Processing": (["payment", "online payment", "checkout", "vnpay", "payos", "momo"], {}),
 }
 
 LAYERS = [
@@ -284,7 +284,7 @@ def build() -> dict:
         "_meta": {
             "status": "GENERATED by tools/build_sedo.py — edit the SPEC there, not this file.",
             "description": "Software Engineering Domain Ontology (SEDO), 4-layer hierarchy for DASSF. "
-                           "Bilingual (EN + VI) keywords; only isA (parent) is used by the measures.",
+                           "English-only keywords; only isA (parent) is used by the measures.",
             "counts": {
                 "concepts": len(concepts),
                 "parent_classes": len(parents),
