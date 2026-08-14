@@ -13,14 +13,16 @@ LEVELS = {"Critical", "High", "Moderate", "Low"}
 
 
 def build_thesis(title: str):
+    # Uses terms the SEDO ontology recognizes (React, Hotel) so the structural
+    # and domain dimensions are exercised.
     thesis = Thesis(
         title=title,
-        description="demo",
-        scope="web platform",
-        objectives="build core features",
-        expected_result="a working system",
+        description="a hotel booking management system",
+        scope="React frontend with PostgreSQL database and REST API",
+        objectives="digitize hotel booking and manage rooms",
+        expected_result="a deployed web application",
     )
-    thesis.domains = [Domain(name="E-commerce")]
+    thesis.domains = [Domain(name="Hotel")]
     thesis.semantics = [SemanticCategory(name="Management System")]
     thesis.structures = [StructureType(name="Web Application")]
     thesis.lexical_tags = [LexicalTag(name="order")]
@@ -44,10 +46,11 @@ def test_identical_topics_are_critical():
     assert scores["action"] == "Reject"
 
 
-def test_weights_match_paper():
-    # DASSF paper Eq. 1: alpha=0.30, beta=0.20, gamma=0.30, delta=0.20
-    assert WEIGHTS == {"semantic": 0.30, "lexical": 0.20, "structure": 0.30, "domain": 0.20}
+def test_weights_are_a_valid_distribution():
+    # WEIGHTS may be the paper default, a tuned file, or an env override — but is always a simplex point.
+    assert set(WEIGHTS) == {"semantic", "lexical", "structure", "domain"}
     assert round(sum(WEIGHTS.values()), 6) == 1.0
+    assert all(0.0 <= v <= 1.0 for v in WEIGHTS.values())
 
 
 def test_level_for_matches_table_3():
@@ -76,6 +79,19 @@ def test_is_structural_duplication():
     assert not is_structural_duplication(0.30, 0.20)
 
 
+def test_reasons_are_not_contradictory():
+    # A structural duplication (different domain) must never also claim "same business domain".
+    left = build_thesis("Hotel Management System")
+    right = build_thesis("Pharmacy Management System")
+    right.description = "a pharmacy inventory management system"
+    right.objectives = "digitize pharmacy sales and manage medicine stock"
+    right.domains = [Domain(name="Pharmacy")]
+    scores = calculate_scores(left, right)
+    assert scores["structural_duplication"] is True
+    assert "same business domain" not in scores["reason"]
+    assert "same tech stack with a different business domain" in scores["reason"]
+
+
 def test_weighted_jaccard_without_idf_is_plain_jaccard():
     assert weighted_jaccard({"x", "y"}, {"y", "z"}, None) == 1 / 3
     assert weighted_jaccard(set(), set(), None) == 0.0
@@ -85,3 +101,20 @@ def test_weighted_jaccard_uses_idf():
     idf = {"common": 1.0, "rare": 5.0}
     # intersection weight = 1.0 ("common"); union weight = 1.0 + 5.0
     assert weighted_jaccard({"common", "rare"}, {"common"}, idf) == 1.0 / 6.0
+
+
+def test_calculate_scores_accepts_lexical_model():
+    # Passing a fitted TF-IDF LexicalScorer routes the lexical dimension through cosine (paper §V-E).
+    from app.services.lexical import LexicalScorer
+
+    model = LexicalScorer(["Hotel booking with React", "Pharmacy inventory with Node"])
+    scores = calculate_scores(build_thesis("Hotel Management"), build_thesis("Hotel Management"), model)
+    assert 0.0 <= scores["lexical_score"] <= 1.0
+    assert scores["overall_score"] == 1.0  # identical topics stay Critical regardless of lexical path
+    assert scores["level"] == "Critical"
+
+
+def test_calculate_scores_accepts_legacy_idf_dict():
+    scores = calculate_scores(build_thesis("Hotel"), build_thesis("Hotel"), {"hotel": 2.0})
+    assert 0.0 <= scores["lexical_score"] <= 1.0
+    assert scores["level"] in LEVELS

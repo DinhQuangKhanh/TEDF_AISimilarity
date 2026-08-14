@@ -17,3 +17,13 @@ class SimilarityRepository:
             .order_by(Similarity.overall_score.desc())
             .all()
         )
+
+    def get_pair(self, a_id: uuid.UUID, b_id: uuid.UUID):
+        """The stored similarity row for an unordered pair, or None. Pairs are stored with the
+        two ids sorted (see calculate_similarity_for_new), so sort the lookup the same way."""
+        low, high = sorted([a_id, b_id])
+        return (
+            self.db.query(Similarity)
+            .filter(Similarity.thesis_a_id == low, Similarity.thesis_b_id == high)
+            .first()
+        )

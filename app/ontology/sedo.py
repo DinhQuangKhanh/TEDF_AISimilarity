@@ -110,19 +110,28 @@ class Sedo:
                 found.add(concept_id)
         return frozenset(found)
 
-    def set_similarity(self, concepts_a, concepts_b, measure) -> float | None:
+    def set_similarity(self, concepts_a, concepts_b, measure, weights=None) -> float | None:
         """Symmetric best-match average between two concept sets.
 
         Returns None when either side has no recognized concept, so the caller
         decides how to fall back (paper Sect. 5.5: unrecognized -> score drops).
+
+        ``weights`` (optional) maps a concept id to a per-concept weight (e.g. corpus IDF), so
+        rare, informative concepts count more than ubiquitous ones. None ⇒ every concept weighs 1
+        (the plain average of the original paper).
         """
         a = list(concepts_a)
         b = list(concepts_b)
         if not a or not b:
             return None
 
+        def weight(concept):
+            return weights.get(concept, 1.0) if weights else 1.0
+
         def directed(source, target):
-            return sum(max(measure(s, t) for t in target) for s in source) / len(source)
+            numerator = sum(weight(s) * max(measure(s, t) for t in target) for s in source)
+            denominator = sum(weight(s) for s in source)
+            return numerator / denominator if denominator else 0.0
 
         return (directed(a, b) + directed(b, a)) / 2.0
 

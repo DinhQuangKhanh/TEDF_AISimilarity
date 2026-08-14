@@ -1,0 +1,138 @@
+{
+  "semantic_backend": "sbert",
+  "corpus_size": 103,
+  "queries_total": 59,
+  "queries_resolved": 59,
+  "sedo_coverage": {
+    "corpus": {
+      "n": 103,
+      "tech_or_method": 0.9612,
+      "domain": 0.835
+    },
+    "queries": {
+      "n": 59,
+      "tech_or_method": 0.7288,
+      "domain": 0.8136
+    }
+  },
+  "default_weights": {
+    "weights": [
+      0.3,
+      0.2,
+      0.3,
+      0.2
+    ],
+    "level": {
+      "n": 59,
+      "level_accuracy": 0.661,
+      "adjacent_accuracy": 0.9831,
+      "macro_f1": 0.4381,
+      "binary_precision": 0.0,
+      "binary_recall": 0.0,
+      "binary_f1": 0.0,
+      "auc": 0.7182,
+      "gold_level_dist": {
+        "Low": 36,
+        "Moderate": 19,
+        "High": 4
+      },
+      "confusion": {
+        "Low": {
+          "Low": 28,
+          "Moderate": 7,
+          "High": 1
+        },
+        "Moderate": {
+          "Low": 8,
+          "Moderate": 11,
+          "High": 0
+        },
+        "High": {
+          "Low": 0,
+          "Moderate": 4,
+          "High": 0
+        }
+      }
+    },
+    "ranking": {
+      "n_resolved": 59,
+      "top1": 0.1017,
+      "top3": 0.2881,
+      "top5": 0.4407,
+      "score_mae": 0.144,
+      "score_pearson": 0.5137,
+      "score_spearman": 0.5696
+    }
+  },
+  "tuned_weights": {
+    "weights": [
+      0.55,
+      0.05,
+      0.05,
+      0.35
+    ],
+    "tuned_for": "level macro-F1",
+    "level": {
+      "n": 59,
+      "level_accuracy": 0.7966,
+      "adjacent_accuracy": 0.9492,
+      "macro_f1": 0.7247,
+      "binary_precision": 0.6667,
+      "binary_recall": 0.5,
+      "binary_f1": 0.5714,
+      "auc": 0.7773,
+      "gold_level_dist": {
+        "Low": 36,
+        "Moderate": 19,
+        "High": 4
+      },
+      "confusion": {
+        "Low": {
+          "Low": 30,
+          "Moderate": 5,
+          "High": 1
+        },
+        "Moderate": {
+          "Low": 4,
+          "Moderate": 15,
+          "High": 0
+        },
+        "High": {
+          "Low": 2,
+          "Moderate": 0,
+          "High": 2
+        }
+      }
+    },
+    "ranking": {
+      "n_resolved": 59,
+      "top1": 0.1017,
+      "top3": 0.2373,
+      "top5": 0.4237,
+      "score_mae": 0.1042,
+      "score_pearson": 0.6567,
+      "score_spearman": 0.7205
+    }
+  },
+  "ablation_from_default": {
+    "full_macro_f1": 0.4381,
+    "drop": {
+      "semantic": {
+        "macro_f1": 0.4045,
+        "delta_vs_full": -0.0336
+      },
+      "lexical": {
+        "macro_f1": 0.3635,
+        "delta_vs_full": -0.0746
+      },
+      "structure": {
+        "macro_f1": 0.5434,
+        "delta_vs_full": 0.1053
+      },
+      "domain": {
+        "macro_f1": 0.3408,
+        "delta_vs_full": -0.0973
+      }
+    }
+  }
+}

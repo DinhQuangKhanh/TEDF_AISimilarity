@@ -1,0 +1,12 @@
+{
+  "weights": {
+    "semantic": 0.55,
+    "lexical": 0.05,
+    "structure": 0.05,
+    "domain": 0.35
+  },
+  "step": 0.05,
+  "macro_f1": 0.7247,
+  "level_accuracy": 0.7966,
+  "source": "grid-search (level macro-F1) on data/FA26_topics_deduplicated.json"
+}

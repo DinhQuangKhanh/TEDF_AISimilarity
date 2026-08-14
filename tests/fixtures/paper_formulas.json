@@ -1,0 +1,43 @@
+{
+  "_note": "Worked examples from the DASSF paper. tests/test_paper_formulas.py runs each case through the real code and asserts the output matches 'expected' within 'tol'. This makes the paper's numeric claims machine-verifiable.",
+
+  "wu_palmer": [
+    { "c1": "react", "c2": "angular", "expected": 0.75, "tol": 0.0001, "source": "Sect 3.3 - React and Angular are interchangeable Frontend frameworks" },
+    { "c1": "react", "c2": "vue",     "expected": 0.75, "tol": 0.0001, "source": "Sect 3.3 - same Frontend group" },
+    { "c1": "react", "c2": "django",  "expected": 0.5,  "tol": 0.0001, "source": "derived - different groups, same Technical Stack layer" },
+    { "c1": "react", "c2": "hotel",   "expected": 0.25, "tol": 0.0001, "source": "derived - different layers, LCS is the root" }
+  ],
+
+  "wpath": [
+    { "c1": "hotel", "c2": "pharmacy",   "expected": 0.205, "tol": 0.02, "source": "Sect 5.4 - a true structural-dup positive has S_dom ~ 0.2" },
+    { "c1": "hotel", "c2": "restaurant", "expected": 0.369, "tol": 0.02, "source": "Sect 3.3 - Hotel and Restaurant are siblings under Hospitality (closer than cross-group)" }
+  ],
+
+  "mddm_weights": {
+    "semantic": 0.30, "lexical": 0.20, "structure": 0.30, "domain": 0.20,
+    "source": "Eq. 1 / Sect 3.5 - alpha=0.30, beta=0.20, gamma=0.30, delta=0.20; sum = 1"
+  },
+
+  "composite": [
+    { "s_sem": 1.0, "s_lex": 1.0, "s_str": 1.0, "s_dom": 1.0, "expected": 1.0,  "tol": 0.0001, "source": "Eq. 1 - identical topic" },
+    { "s_sem": 0.0, "s_lex": 0.0, "s_str": 1.0, "s_dom": 0.2, "expected": 0.34, "tol": 0.0001, "source": "Sect 5.4 - delta*S_dom = 0.20*0.2 = 0.04; composite = 0.30 + 0.04 = 0.34" },
+    { "s_sem": 0.9, "s_lex": 0.9, "s_str": 0.9, "s_dom": 0.9, "expected": 0.9,  "tol": 0.0001, "source": "Eq. 1 - weights sum to 1" }
+  ],
+
+  "levels": [
+    { "score": 0.39, "level": "Low",      "action": "Accept",                        "source": "Table 3 - < 0.40" },
+    { "score": 0.40, "level": "Moderate", "action": "Warn; committee reviews",        "source": "Table 3 - 0.40-0.65" },
+    { "score": 0.64, "level": "Moderate", "action": "Warn; committee reviews",        "source": "Table 3 - 0.40-0.65" },
+    { "score": 0.65, "level": "High",     "action": "Require substantial revision",   "source": "Table 3 - 0.65-0.85" },
+    { "score": 0.84, "level": "High",     "action": "Require substantial revision",   "source": "Table 3 - 0.65-0.85" },
+    { "score": 0.85, "level": "Critical", "action": "Reject",                         "source": "Table 3 - >= 0.85" },
+    { "score": 0.95, "level": "Critical", "action": "Reject",                         "source": "Table 3 - >= 0.85" }
+  ],
+
+  "structural_duplication": [
+    { "s_str": 1.0,  "s_dom": 0.2,   "expected": true,  "source": "Sect 3.5 - S_str >= tau_str AND S_dom < tau_dom" },
+    { "s_str": 0.65, "s_dom": 0.399, "expected": true,  "source": "Sect 3.5 - boundary" },
+    { "s_str": 1.0,  "s_dom": 0.8,   "expected": false, "source": "Sect 3.5 - same domain, not the structural class" },
+    { "s_str": 0.3,  "s_dom": 0.2,   "expected": false, "source": "Sect 3.5 - different stack, not the structural class" }
+  ]
+}

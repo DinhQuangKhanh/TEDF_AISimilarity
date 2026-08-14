@@ -14,6 +14,17 @@ from app.services.similarity_service import SimilarityService
 from app.utils.duplicate_checker import content_hash, is_duplicate
 
 
+def _is_content_sparse(thesis_data) -> bool:
+    """True when a topic has at most one of the four non-title content fields filled — too little
+    to score reliably, so it should be reviewed by a human rather than trusted blindly."""
+    filled = sum(
+        1
+        for value in (thesis_data.description, thesis_data.scope, thesis_data.objectives, thesis_data.expected_result)
+        if value and value.strip()
+    )
+    return filled <= 1
+
+
 class ThesisService:
     def __init__(self, db: Session):
         self.db = db
@@ -89,7 +100,9 @@ class ThesisService:
                 thesis_data.semester,
                 thesis_data.program,
             ),
-            needs_review=bool(candidates),
+            # Flag for review when a near-duplicate exists OR the topic is too sparse to score
+            # reliably (content fields left empty, LLM fill disabled). See PROJECT rule P1.6.
+            needs_review=bool(candidates) or _is_content_sparse(thesis_data),
         )
         self.repo.create(thesis)
         self._attach_classifications(thesis, thesis_data)

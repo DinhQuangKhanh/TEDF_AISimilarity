@@ -2,7 +2,9 @@ import os
 
 import httpx
 
+from app.core import config
 from app.schemas.import_schema import NormalizedRow
+from app.services.preprocessing import concept_names, preprocess
 from app.utils.text_cleaner import clean_text, normalize_list
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -36,6 +38,7 @@ class LLMNormalizerService:
         raw_row: dict,
         semester: str | None = None,
         program: str | None = None,
+        fill_missing: bool | None = None,
     ) -> NormalizedRow:
         data = raw_row["data"]
         title = clean_text(data.get("title"))
@@ -44,8 +47,12 @@ class LLMNormalizerService:
         objectives = clean_text(data.get("objectives"))
         expected_result = clean_text(data.get("expected_result"))
 
-        # Thiếu trường nội dung nào & có title -> để AI (hoặc heuristic) suy ra.
-        if title:
+        # A duplicate-detection system must not compare on invented text, so INVENTING missing
+        # content is off by default (config.ALLOW_LLM_CONTENT_FILL). When disabled, missing fields
+        # stay empty and the topic gets flagged for review downstream (needs_review). Only fill
+        # when explicitly opted in — and even then, never overwrite fields the author provided.
+        allow_fill = config.ALLOW_LLM_CONTENT_FILL if fill_missing is None else fill_missing
+        if title and allow_fill:
             if not description:
                 description = self._generate_description(title)
             if not scope:
@@ -55,19 +62,20 @@ class LLMNormalizerService:
             if not expected_result:
                 expected_result = self._generate_expected_result(title, description)
 
-        domains = normalize_list(
-            [item.strip() for item in (data.get("domains") or "").split(",") if item.strip()]
-        )
-        technologies = normalize_list(
-            [item.strip() for item in (data.get("technologies") or "").split(",") if item.strip()]
-        )
-        lexical = normalize_list((title or "").split())[:10]
+        # Classification tags are derived from the REAL text via Module 1 (SEDO NER), not fabricated.
+        # Business domain / methodology / task are taken from the TITLE, where they are stated cleanly —
+        # scraping the full description injects incidental nouns (e.g. "staff" → Employee). The tech stack
+        # may legitimately appear in the scope/description, so tech reads those too. CSV columns merge on top.
+        title_m1 = preprocess(title)
+        tech_m1 = preprocess(" ".join(filter(None, [title, scope, description])))
+        csv_domains = [item.strip() for item in (data.get("domains") or "").split(",") if item.strip()]
+        csv_tech = [item.strip() for item in (data.get("technologies") or "").split(",") if item.strip()]
+
+        domains = normalize_list(csv_domains + concept_names(title_m1.domains))
+        technologies = normalize_list(csv_tech + concept_names(tech_m1.tech))
+        structures = normalize_list(concept_names(title_m1.methods) + concept_names(title_m1.tasks))
         semantic = normalize_list(domains or ["General"])
-        structures = normalize_list(
-            ["Web Application"]
-            if any(technology in technologies for technology in ["React", "Node.js", "FastAPI"])
-            else ["Software Project"]
-        )
+        lexical = normalize_list(sorted(title_m1.tokens))[:10]
 
         return NormalizedRow(
             semester=clean_text(data.get("semester")) or semester,
