@@ -38,6 +38,21 @@ def test_analyze_uses_recent_capstone_corpus_dbfree():
     assert set(top["breakdown"]) == {"semantic", "lexical", "structure", "domain"}
     assert top["revision_suggestion"]
     assert top["otherSemester"] in {"Spring 2026", "Summer 2026"}
+    # matched topic content (side-by-side) + per-dimension highlight spans
+    assert top["other"]["title"] and "title" in top["other"]
+    # field-aligned highlights: only fields with a real overlap, each carrying angle + typed spans
+    assert set(top["highlights"]) == {"fields"}
+    fields = top["highlights"]["fields"]
+    assert isinstance(fields, list)
+    valid_fields = {"title", "description", "objectives", "scope", "technologies", "expectedResults"}
+    valid_angles = {"semantic", "lexical", "structural", "domain"}
+    for fh in fields:
+        assert set(fh.keys()) == {"field", "angle", "score", "a", "b"}
+        assert fh["field"] in valid_fields
+        assert fh["angle"] in valid_angles
+        assert all(set(sp.keys()) == {"text", "angle"} for sp in fh["a"] + fh["b"])
+        assert all(sp["angle"] in valid_angles for sp in fh["a"] + fh["b"])
+    assert data["query"]["title"].startswith("EcoTrack")
 
 
 def test_analyze_title_only_topic_still_works():

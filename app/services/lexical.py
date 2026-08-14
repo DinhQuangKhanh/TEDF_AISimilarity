@@ -43,6 +43,20 @@ class LexicalScorer:
             self._cache[text] = vector
         return vector
 
+    def idf(self, term: str) -> float:
+        """IDF weight of a folded Module-1 term (higher = rarer/more distinctive). 0.0 if unknown.
+
+        Used by the highlighter to rank shared terms so only distinctive ones (e.g. ``booking``,
+        ``pharmacy``) are painted, not corpus-wide generics (which carry a low IDF)."""
+        if self._vectorizer is not None:
+            index = self._vectorizer.vocabulary_.get(term)
+            if index is None:
+                return 0.0
+            return float(self._vectorizer.idf_[index])
+        if self._idf is not None:
+            return self._idf.get(term, 0.0)
+        return 0.0
+
     def similarity(self, text_a: str | None, text_b: str | None) -> float:
         a = (text_a or "").strip()
         b = (text_b or "").strip()

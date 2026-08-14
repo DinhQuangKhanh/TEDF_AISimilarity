@@ -11,8 +11,21 @@ the UI can paint it green / amber / red and say *why*.
 from __future__ import annotations
 
 from app.services.explanation import build_explanation
+from app.services.highlight_service import compute_highlights
 from app.services.preprocessing import concept_names, preprocess
 from app.utils.score_calculator import WEIGHTS, action_for, build_concept_idf, calculate_scores
+
+
+def _content_fields(topic) -> dict:
+    """The six comparable fields of a topic, for the side-by-side view."""
+    return {
+        "title": getattr(topic, "title", None),
+        "description": getattr(topic, "description", None),
+        "scope": getattr(topic, "scope", None),
+        "objectives": getattr(topic, "objectives", None),
+        "expected_result": getattr(topic, "expected_result", None),
+        "technologies": [t.name for t in getattr(topic, "technologies", [])],
+    }
 
 
 def _text(obj, *fields: str) -> str:
@@ -104,6 +117,14 @@ def analyze_topic(query, corpus, lexical_model, *, top_k: int = 5, semantic_back
         report = build_explanation(query, cand, scores)
         report["otherTitle"] = cand.title
         report["otherSemester"] = getattr(cand, "semester", None)
+        report["other"] = _content_fields(cand)          # matched topic content, for side-by-side
+        report["highlights"] = compute_highlights(query, cand, lexical_model)   # field-aligned overlap spans
         matches.append(report)
 
-    return {"steps": steps, "topMatches": matches, "weights": WEIGHTS, "corpusSize": len(corpus)}
+    return {
+        "steps": steps,
+        "topMatches": matches,
+        "weights": WEIGHTS,
+        "corpusSize": len(corpus),
+        "query": _content_fields(query),                  # echo so the UI has both sides
+    }
