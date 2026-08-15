@@ -10,7 +10,8 @@ xlrd>=2.0.1
 python-multipart
 pytest
 httpx
-# Semantic dimension (S_semantic). Optional-but-recommended: without it the scorer
-# degrades to a token-Jaccard fallback (see app/services/semantic_encoder.py).
-sentence-transformers
+# Semantic dimension (S_semantic). Optional-but-recommended: without it the scorer degrades to a
+# token-Jaccard fallback (see app/services/semantic_encoder.py). fastembed runs a compact English
+# MiniLM model on ONNX Runtime — no PyTorch — so it fits a 2 GB server (English-only duplicate check).
+fastembed
 numpy
