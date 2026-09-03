@@ -19,35 +19,16 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services.lexical import build_lexical_scorer  # noqa: E402
-from app.utils import score_calculator as sc  # noqa: E402
-from evaluate import (  # noqa: E402
-    EvalThesis, build_corpus, dims_matrix, level_metrics, load_queries,
-    resolve_target, simplex_size, tune_weights,
-)
+from evaluate import level_metrics, prepare_benchmark, simplex_size, tune_weights  # noqa: E402
 
 _DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
 _STEPS = (0.10, 0.05, 0.04, 0.025)
 
 
-def _prepare():
-    """The one-time expensive part: SBERT + four-dimension scoring of the whole benchmark."""
-    corpus = build_corpus()
-    queries = load_queries()
-    for row, q in enumerate(queries):
-        q["_row"] = row
-        q["_thesis"] = EvalThesis(q["title"])
-        idx, match = resolve_target(q["gold_target"], corpus)
-        q["target_idx"] = idx if match >= 0.5 else None
-    lexical_model = build_lexical_scorer(corpus)
-    concept_idf = sc.build_concept_idf(corpus)
-    matrix = dims_matrix(queries, corpus, lexical_model, concept_idf)
-    return queries, matrix, len(corpus)
-
-
 def main() -> None:
     t0 = time.perf_counter()
-    queries, matrix, n_corpus = _prepare()
+    queries, corpus, matrix = prepare_benchmark()
+    n_corpus = len(corpus)
     prep = time.perf_counter() - t0
     print(f"[prep] SBERT + score {len(queries)}×{n_corpus} pairs = {prep:.1f}s  (ONE-TIME, "
           f"independent of grid step and of the query)\n")

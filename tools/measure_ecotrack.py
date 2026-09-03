@@ -2,10 +2,10 @@
 so the effect of P3 (no TaskType in structural + concept-IDF weighting) is visible on the exact
 case that motivated it. Toggle P3 via env to compare:
 
-    # P3 ON (default)
+    # function-centric structural (default)
     python tools/measure_ecotrack.py
-    # P3 OFF (old behaviour)
-    STRUCT_INCLUDE_TASKTYPE=true CONCEPT_IDF_WEIGHTING=false python tools/measure_ecotrack.py
+    # old tech-centric structural
+    STRUCT_LAYERS="TechnicalStack,Methodology" CONCEPT_IDF_WEIGHTING=false python tools/measure_ecotrack.py
 """
 
 import os
@@ -42,7 +42,7 @@ def main() -> None:
         key=lambda pair: pair[1]["overall_score"], reverse=True,
     )[:5]
 
-    print(f"P3 flags: STRUCT_INCLUDE_TASKTYPE={config.STRUCT_INCLUDE_TASKTYPE} "
+    print(f"flags: STRUCT_LAYERS={sorted(config.STRUCT_LAYERS)} "
           f"CONCEPT_IDF_WEIGHTING={config.CONCEPT_IDF_WEIGHTING}")
     print(f"{'ovr':>5}{'sem':>6}{'lex':>6}{'str':>6}{'dom':>6}{'  struct-dup':>12}  title")
     for cand, s in scored:

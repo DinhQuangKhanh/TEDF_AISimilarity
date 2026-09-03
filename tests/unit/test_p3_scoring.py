@@ -23,10 +23,21 @@ class Topic:
         self.domains = [Tag(d) for d in domains]
 
 
-# ── P3.1: structural excludes TaskType by default (paper §V-E) ──────────────────────
-def test_structural_layers_exclude_tasktype_by_default():
-    assert "TaskType" not in sc._STRUCT_LAYERS
-    assert {"TechnicalStack", "Methodology"} <= sc._STRUCT_LAYERS
+# ── Structural is function-centric: reads TaskType, NOT raw technology (ICTA §F.6) ──────
+# The expert ground truth forbids using technology as the duplication basis, and a tech-based
+# structural score is anti-correlated with the human label; TaskType ("what the system does") is
+# the function signal the ground truth rewards. So structural must include TaskType and exclude
+# TechnicalStack by default.
+def test_structural_layers_are_function_centric_by_default():
+    assert "TaskType" in sc._STRUCT_LAYERS
+    assert "TechnicalStack" not in sc._STRUCT_LAYERS
+
+
+def test_structural_layers_are_overridable(monkeypatch):
+    monkeypatch.setenv("STRUCT_LAYERS", "TechnicalStack,Methodology")
+    assert config._resolve_struct_layers() == {"TechnicalStack", "Methodology"}
+    monkeypatch.setenv("STRUCT_LAYERS", "garbage,nonsense")
+    assert config._resolve_struct_layers() == {"TaskType"}  # invalid → function-centric default
 
 
 # ── P3.3: MDDM weights are configurable (env → tuned file → paper) ───────────────────
@@ -46,14 +57,16 @@ def test_deployed_weights_are_a_valid_distribution():
 
 def test_config_falls_back_to_paper_when_unset(monkeypatch):
     _clear_weight_env(monkeypatch)
-    assert config._mddm_weights() == _PAPER
+    weights, source = config._mddm_weights()
+    assert weights == _PAPER
+    assert "paper" in source
 
 
 def test_config_env_weights_override_and_renormalize(monkeypatch):
     _clear_weight_env(monkeypatch)
     for k in ("SEMANTIC", "LEXICAL", "STRUCTURE", "DOMAIN"):
         monkeypatch.setenv("MDDM_" + k, "1")
-    w = config._mddm_weights()
+    w, _source = config._mddm_weights()
     assert all(abs(v - 0.25) < 1e-9 for v in w.values())
     assert abs(sum(w.values()) - 1.0) < 1e-9
 
@@ -64,7 +77,7 @@ def test_config_uses_tuned_file_when_enabled(monkeypatch):
 
     _clear_weight_env(monkeypatch)
     monkeypatch.setenv("MDDM_USE_TUNED", "true")
-    w = config._mddm_weights()
+    w, _source = config._mddm_weights()
     path = os.path.join(config._SRC_DIR, "data", "tuned_weights.json")
     if os.path.exists(path):
         with open(path, encoding="utf-8") as handle:
@@ -79,7 +92,7 @@ def test_explicit_env_beats_tuned(monkeypatch):
     monkeypatch.setenv("MDDM_USE_TUNED", "true")
     for k, v in (("SEMANTIC", "0.4"), ("LEXICAL", "0.1"), ("STRUCTURE", "0.1"), ("DOMAIN", "0.4")):
         monkeypatch.setenv("MDDM_" + k, v)
-    w = config._mddm_weights()
+    w, _source = config._mddm_weights()
     assert abs(w["semantic"] - 0.4) < 1e-9 and abs(w["domain"] - 0.4) < 1e-9
 
 
@@ -118,19 +131,23 @@ def test_weighted_set_similarity_identity_still_one():
     assert sedo.set_similarity({"react"}, {"react"}, sedo.wu_palmer, {"react": 9.0}) == 1.0
 
 
-# ── P3.2: end-to-end on the structural dimension (no SBERT needed) ───────────────────
+# ── concept-IDF weighting reduces the base-rate inflation (mechanism test) ──────────
+# Pass an explicit tech layer set: this checks the weighting MATH on shared ubiquitous concepts,
+# independent of which layers the deployed structural dimension happens to read.
 def test_ontology_dimension_weighting_reduces_base_rate_structural():
     sedo = get_sedo()
+    tech = {"TechnicalStack"}
     text_a = "App with React and Kubernetes"   # shares only the ubiquitous React with B
     text_b = "App with React"
-    plain = sc._ontology_dimension(sedo, text_a, text_b, sc._STRUCT_LAYERS, sedo.wu_palmer, set(), set())
-    weighted = sc._ontology_dimension(sedo, text_a, text_b, sc._STRUCT_LAYERS, sedo.wu_palmer,
+    plain = sc._ontology_dimension(sedo, text_a, text_b, tech, sedo.wu_palmer, set(), set())
+    weighted = sc._ontology_dimension(sedo, text_a, text_b, tech, sedo.wu_palmer,
                                       set(), set(), {"react": 1.0, "kubernetes": 6.0})
     assert weighted < plain
 
 
-def test_tasktype_excluded_from_structural_text():
-    # "management system" maps to a TaskType (CRUD) concept, which must NOT feed the structural score.
+def test_tasktype_feeds_structural_by_default():
+    # Function-centric structural (ICTA §F.6): a "management system" maps to a TaskType (CRUD)
+    # concept, which now IS the structural signal — the opposite of the old paper/tech-centric rule.
     sedo = get_sedo()
     concepts = {c for c in sedo.recognize("hotel management system") if sedo.nodes[c]["layer"] in sc._STRUCT_LAYERS}
-    assert "crud_management" not in concepts
+    assert "crud_management" in concepts

@@ -11,6 +11,7 @@ duplication" feature (``explain_service.py``).
 
 from __future__ import annotations
 
+from app.services import capability
 from app.services.preprocessing import concept_names, preprocess
 from app.utils.score_calculator import (
     REASON_THRESHOLD,
@@ -30,7 +31,7 @@ def _shared(a_ids: set[str], b_ids: set[str]) -> list[str]:
     return concept_names(a_ids & b_ids)
 
 
-def build_explanation(a, b, scores: dict) -> dict:
+def build_explanation(a, b, scores: dict, capability_model=None) -> dict:
     """Build the committee-facing explanation for topic ``a`` vs matched topic ``b``.
 
     ``scores`` is the dict from ``calculate_scores`` (the four sub-scores + overall). ``a`` and ``b``
@@ -43,27 +44,32 @@ def build_explanation(a, b, scores: dict) -> dict:
     overall = scores["overall_score"]
     level = scores.get("level") or level_for(overall)
 
-    # Recompute the concept overlap the same way the dimensions read the text (title-centric domain,
-    # broader text for the tech stack) so the "why" lines up with the scores.
-    a_tech = preprocess(_text(a, "title", "scope", "description"))
-    b_tech = preprocess(_text(b, "title", "scope", "description"))
+    # Concept overlap read the SAME way the dimensions do, so the "why" lines up with the scores:
+    #  · structural = shared distinctive CORE FUNCTIONS (capability), read from all content fields;
+    #  · domain     = shared business-domain concepts, read title-centric (SEDO);
+    #  · shared tech is kept only as INFORMATION — it is NOT what drives the structural score.
+    a_content = _text(a, "title", "scope", "description", "objectives", "expected_result")
+    b_content = _text(b, "title", "scope", "description", "objectives", "expected_result")
     a_dom = preprocess(_text(a, "title"))
     b_dom = preprocess(_text(b, "title"))
+    a_tech = preprocess(_text(a, "title", "scope", "description"))
+    b_tech = preprocess(_text(b, "title", "scope", "description"))
 
-    shared_tech = _shared(a_tech.tech, b_tech.tech)
+    _stop = capability_model.get("stop") if capability_model else None
+    shared_functions = sorted(capability.distinctive(a_content, _stop) & capability.distinctive(b_content, _stop))
     shared_domain = _shared(a_dom.domains, b_dom.domains)
-    shared_task = _shared(a_tech.methods | a_tech.tasks, b_tech.methods | b_tech.tasks)
+    shared_tech = _shared(a_tech.tech, b_tech.tech)   # informational only — not the structural signal
 
-    # Dimension-driven reasons, each naming the concrete concepts that fired.
+    struct_dup = is_structural_duplication(structure, domain, overall)
+
+    # Dimension-driven reasons, each naming the concrete evidence that fired.
     reasons: list[str] = []
-    if is_structural_duplication(structure, domain):
-        reasons.append("same tech stack with a different business domain")
+    if struct_dup:
+        reasons.append("same core functions with a different business domain")
     elif shared_domain and domain >= REASON_THRESHOLD:
         reasons.append(f"same business domain ({', '.join(shared_domain)})")
-    if shared_tech and structure >= REASON_THRESHOLD:
-        reasons.append(f"shared architecture/stack ({', '.join(shared_tech)})")
-    if shared_task and structure >= REASON_THRESHOLD:
-        reasons.append(f"same task type ({', '.join(shared_task)})")
+    if shared_functions and structure >= REASON_THRESHOLD:
+        reasons.append(f"shared core functions ({', '.join(shared_functions)})")
     if lexical >= REASON_THRESHOLD:
         reasons.append("overlapping key terms")
     if semantic >= REASON_THRESHOLD:
@@ -73,7 +79,7 @@ def build_explanation(a, b, scores: dict) -> dict:
         "overall_score": round(overall, 4),
         "level": level,
         "action": action_for(level),
-        "is_structural_duplication": is_structural_duplication(structure, domain),
+        "is_structural_duplication": struct_dup,
         "breakdown": {
             "semantic": round(semantic, 4),
             "lexical": round(lexical, 4),
@@ -81,6 +87,6 @@ def build_explanation(a, b, scores: dict) -> dict:
             "domain": round(domain, 4),
         },
         "thresholds": {"structural_tau_str": TAU_STR, "structural_tau_dom": TAU_DOM},
-        "shared_concepts": {"tech": shared_tech, "domain": shared_domain, "task": shared_task},
+        "shared_concepts": {"function": shared_functions, "domain": shared_domain, "tech": shared_tech},
         "reasons": reasons,
     }

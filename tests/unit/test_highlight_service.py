@@ -88,13 +88,26 @@ def test_idf_floor_drops_corpus_wide_terms():
     assert "inventory" not in terms and "prescription" not in terms
 
 
-def test_technologies_alignment_is_structural():
-    a = _Topic(title="A", technologies=["ReactJS", "Node.js", "MongoDB"])
-    b = _Topic(title="B", technologies=["ReactJS", "Node.js", "PostgreSQL"])
+def test_technologies_are_never_painted_as_structural():
+    # Structural no longer scores on the tech stack (ICTA §H), so shared React/Node must NOT be
+    # highlighted as "structural" — and the technologies field is not highlighted at all.
+    a = _Topic(title="A system", description="Built with ReactJS and Node.js and MongoDB.",
+               technologies=["ReactJS", "Node.js", "MongoDB"])
+    b = _Topic(title="B system", description="Built with ReactJS and Node.js and PostgreSQL.",
+               technologies=["ReactJS", "Node.js", "PostgreSQL"])
     out = compute_highlights(a, b, lexical_model=None)
 
-    tech = next((f for f in out["fields"] if f["field"] == "technologies"), None)
-    assert tech is not None
-    assert tech["angle"] == "structural"
-    assert tech["a"] and tech["b"]
-    assert all(s["angle"] == "structural" for s in tech["a"] + tech["b"])
+    assert not any(f["field"] == "technologies" for f in out["fields"])
+    struct = {s["text"].lower() for f in out["fields"] for s in f["a"] + f["b"] if s["angle"] == "structural"}
+    assert "reactjs" not in struct and "node.js" not in struct and "mongodb" not in struct
+
+
+def test_structural_paints_shared_core_functions():
+    # Structural evidence = shared distinctive core functions (booking, real-time tracking…).
+    a = _Topic(title="A", description="A real-time booking platform with live tracking of drivers.")
+    b = _Topic(title="B", description="A booking service with real time tracking for customers.")
+    out = compute_highlights(a, b, lexical_model=None)
+
+    struct = {s["text"].lower() for f in out["fields"] for s in f["a"] + f["b"] if s["angle"] == "structural"}
+    assert struct, "expected at least one shared core-function span"
+    assert any("booking" in s or "tracking" in s for s in struct)

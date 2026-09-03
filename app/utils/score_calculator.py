@@ -1,6 +1,8 @@
 import json
 import math
+import re
 import uuid
+from functools import lru_cache
 
 from sqlalchemy.orm import Session
 
@@ -9,13 +11,16 @@ from app.core.config import SEDO_FALLBACK_TOKENS, WPATH_K
 from app.models.similarity import Similarity
 from app.models.thesis import Thesis
 from app.ontology.sedo import get_sedo
+from app.services import capability as _capability
 from app.services.semantic_encoder import semantic_similarity
-from app.utils.text_cleaner import tokenize
+from app.utils.text_cleaner import normalize_key, tokenize
 
-# Structural reads Technical Stack ∪ Methodology (paper §V-E). TaskType (CRUD/Analytics/…) is
-# excluded by default because it is near-universal and inflates the score (P3.1); re-enable via
-# STRUCT_INCLUDE_TASKTYPE. Domain reads DomainEntity.
-_STRUCT_LAYERS = {"TechnicalStack", "Methodology"} | ({"TaskType"} if config.STRUCT_INCLUDE_TASKTYPE else set())
+# Structural reads the SEDO layer set chosen in config (default: TaskType — "what the system does").
+# The expert ground truth judges by function, not technology; a tech-based structural score is
+# anti-correlated with the human label, while TaskType is the function-centric signal the ground
+# truth rewards (evaluate_ground_truth.py; ICTA_REVIEW_ANALYSIS §F.3/§F.6). Override via the
+# STRUCT_LAYERS env var. Domain reads DomainEntity.
+_STRUCT_LAYERS = config.STRUCT_LAYERS
 _DOMAIN_LAYERS = {"DomainEntity"}
 
 # MDDM fusion weights (DASSF paper, Eq. 1): default alpha=0.30, beta=0.20, gamma=0.30, delta=0.20.
@@ -37,6 +42,33 @@ _ACTIONS = {
     "High": "Require substantial revision",
     "Critical": "Reject",
 }
+
+
+@lru_cache(maxsize=1)
+def _tech_mask_pattern():
+    """Regex matching every SEDO TechnicalStack surface term (built once). None if SEDO has none."""
+    sedo = get_sedo()
+    kws = sorted(
+        {normalize_key(k) for node in sedo.nodes.values() if node.get("layer") == "TechnicalStack"
+         for k in node.get("keywords", []) if normalize_key(k)},
+        key=len, reverse=True,  # longest first so multi-word tech phrases win in the alternation
+    )
+    if not kws:
+        return None
+    return re.compile(r"(?<![\w])(" + "|".join(re.escape(k) for k in kws) + r")(?![\w])")
+
+
+@lru_cache(maxsize=8192)
+def mask_technology(text: str | None) -> str:
+    """Strip TechnicalStack terms (React, ASP.NET Core, SQL Server …) so the semantic encoder scores
+    the *business meaning*, not the shared stack. The expert ground truth ignores technology, and a
+    tech-laden text inflates the similarity of two same-stack topics; masking lifts the semantic
+    signal's correlation with the human label markedly (ICTA_REVIEW_ANALYSIS §H / 2B)."""
+    pattern = _tech_mask_pattern()
+    if pattern is None or not text:
+        return text or ""
+    masked = pattern.sub(" ", f" {normalize_key(text)} ")
+    return re.sub(r"\s+", " ", masked).strip()
 
 
 def _content_text(thesis: Thesis) -> str:
@@ -132,13 +164,19 @@ def clamp(score: float) -> float:
     return max(0.0, min(1.0, round(score, 4)))
 
 
-def level_for(score: float) -> str:
-    if score >= 0.85:
-        return "Critical"
-    if score >= 0.65:
-        return "High"
-    if score >= 0.40:
-        return "Moderate"
+# Four-level scale as (lower bound, level) — exposed so the trace/UI can quote the exact cut-offs.
+# Cut points come from config.LEVEL_CUTS (Moderate, High, Critical), calibrated on the ground truth
+# by default (ICTA §H / 3A) and falling back to the paper's 0.40/0.65/0.85.
+_CUTS = config.LEVEL_CUTS
+LEVEL_THRESHOLDS = ((_CUTS[2], "Critical"), (_CUTS[1], "High"), (_CUTS[0], "Moderate"), (0.0, "Low"))
+
+
+def level_for(score: float, thresholds=None) -> str:
+    """Map a composite to a named level. Uses the deployed ``LEVEL_THRESHOLDS`` (calibrated by
+    default, §3A) unless an explicit ``thresholds`` sequence of (lower_bound, level) is given."""
+    for lower, level in (thresholds or LEVEL_THRESHOLDS):
+        if score >= lower:
+            return level
     return "Low"
 
 
@@ -158,9 +196,18 @@ def composite_score(semantic: float, lexical: float, structure: float, domain: f
     )
 
 
-def is_structural_duplication(structure_score: float, domain_score: float) -> bool:
-    """Same tech stack, different business domain (paper Sect. 3.5)."""
-    return structure_score >= TAU_STR and domain_score < TAU_DOM
+def is_structural_duplication(structure_score: float, domain_score: float,
+                              overall_score: float | None = None) -> bool:
+    """Structural duplication: same core architecture, different business domain (paper §3.5) — but
+    only when the pair is a GENUINE duplicate. On the expert ground truth the bare pattern
+    (structure ≥ τ_str and domain < τ_dom) fires on 233/300 pairs, 221 of them non-duplicates
+    (gold level 0/1): to humans a domain-swap is only *mildly* duplicate (ICTA §F.3). Gating it on
+    the calibrated level reaching High/Critical cuts those false alarms 221 → 1 (ICTA §H / 3B).
+    ``overall_score`` omitted ⇒ the bare paper pattern (backward compatible)."""
+    pattern = structure_score >= TAU_STR and domain_score < TAU_DOM
+    if overall_score is None:
+        return pattern
+    return pattern and level_for(overall_score) in ("High", "Critical")
 
 
 def _join(*parts) -> str:
@@ -210,7 +257,39 @@ def build_concept_idf(theses: list) -> dict[str, float]:
     }
 
 
-def calculate_scores(a: Thesis, b: Thesis, lexical_model=None, concept_idf=None) -> dict:
+def _capability_text(thesis) -> str:
+    """Functional text a topic carries (the five content fields) for capability extraction."""
+    return _join(getattr(thesis, "title", None), getattr(thesis, "scope", None),
+                 getattr(thesis, "description", None), getattr(thesis, "objectives", None),
+                 getattr(thesis, "expected_result", None))
+
+
+def build_capability_model(theses: list) -> dict:
+    """Corpus capability model: per-capability IDF + a stoplist of ubiquitous platform functions
+    (present in > ``config.CAPABILITY_STOP_FRACTION`` of the pool). Backs the function-centric
+    structural dimension when ``config.CAPABILITY_STRUCTURAL`` is on. See ``app/services/capability.py``
+    and ICTA_REVIEW_ANALYSIS §H."""
+    total = len(theses) or 1
+    document_frequency: dict[str, int] = {}
+    for thesis in theses:
+        for tag in _capability.extract(_capability_text(thesis)):
+            document_frequency[tag] = document_frequency.get(tag, 0) + 1
+    idf = {tag: math.log((total + 1) / (df + 1)) + 1.0 for tag, df in document_frequency.items()}
+    stop = {tag for tag, df in document_frequency.items() if df / total > config.CAPABILITY_STOP_FRACTION}
+    return {"idf": idf, "stop": stop}
+
+
+def capability_similarity(text_a: str, text_b: str, model: dict) -> float:
+    """IDF-weighted Jaccard of the two topics' core-function tags, after dropping ubiquitous platform
+    functions — the signal the expert ground truth judges by (function, not technology)."""
+    stop = model.get("stop", set())
+    a = set(_capability.extract(text_a)) - stop
+    b = set(_capability.extract(text_b)) - stop
+    return weighted_jaccard(a, b, model.get("idf"))
+
+
+def calculate_scores(a: Thesis, b: Thesis, lexical_model=None, concept_idf=None,
+                    capability_model=None) -> dict:
     """Score one pair across the four MDDM dimensions.
 
     ``lexical_model`` is optional. Pass a fitted lexical scorer (``app.services.lexical
@@ -246,19 +325,27 @@ def calculate_scores(a: Thesis, b: Thesis, lexical_model=None, concept_idf=None)
     domain_tokens_a = tokenize(domain_text_a)
     domain_tokens_b = tokenize(domain_text_b)
 
-    semantic = clamp(semantic_similarity(text_a, text_b))
+    if config.MASK_TECH_IN_SEMANTIC:
+        semantic = clamp(semantic_similarity(mask_technology(text_a), mask_technology(text_b)))
+    else:
+        semantic = clamp(semantic_similarity(text_a, text_b))
     if lexical_model is not None and hasattr(lexical_model, "similarity"):
         lexical = clamp(lexical_model.similarity(text_a, text_b))
     else:
         # Legacy / fallback: an IDF dict (or None) → TF-IDF-weighted Jaccard on surface tokens.
         idf = lexical_model if isinstance(lexical_model, dict) else None
         lexical = clamp(weighted_jaccard(lexical_tokens_a, lexical_tokens_b, idf))
-    structure = clamp(
-        _ontology_dimension(
-            sedo, struct_text_a, struct_text_b, _STRUCT_LAYERS, sedo.wu_palmer,
-            struct_tokens_a, struct_tokens_b, concept_weights
+    if capability_model is not None:
+        # Function-centric structural: overlap of core capabilities (config.CAPABILITY_STRUCTURAL,
+        # ICTA §H) — measures what the systems DO, ignoring ubiquitous platform functions.
+        structure = clamp(capability_similarity(_capability_text(a), _capability_text(b), capability_model))
+    else:
+        structure = clamp(
+            _ontology_dimension(
+                sedo, struct_text_a, struct_text_b, _STRUCT_LAYERS, sedo.wu_palmer,
+                struct_tokens_a, struct_tokens_b, concept_weights
+            )
         )
-    )
     domain = clamp(
         _ontology_dimension(
             sedo,
@@ -273,7 +360,7 @@ def calculate_scores(a: Thesis, b: Thesis, lexical_model=None, concept_idf=None)
     )
     overall = composite_score(semantic, lexical, structure, domain)
     level = level_for(overall)
-    structural_dup = is_structural_duplication(structure, domain)
+    structural_dup = is_structural_duplication(structure, domain, overall)
 
     # Only report a dimension that actually carries signal, so the explanation
     # stays consistent (a structural duplication must not also read "same domain").
@@ -319,6 +406,7 @@ def calculate_similarity_for_new(db: Session, new_ids: list[uuid.UUID]) -> None:
 
     lexical_model = build_lexical_scorer(corpus_for_models)
     concept_idf = build_concept_idf(corpus_for_models)
+    capability_model = build_capability_model(corpus_for_models) if config.CAPABILITY_STRUCTURAL else None
 
     seen: set[tuple[uuid.UUID, uuid.UUID]] = set()
     for new_thesis in new_theses:
@@ -337,7 +425,7 @@ def calculate_similarity_for_new(db: Session, new_ids: list[uuid.UUID]) -> None:
             )
             if exists:
                 continue
-            scores = calculate_scores(new_thesis, other, lexical_model, concept_idf)
+            scores = calculate_scores(new_thesis, other, lexical_model, concept_idf, capability_model)
             db.add(
                 Similarity(
                     thesis_a_id=thesis_a_id,

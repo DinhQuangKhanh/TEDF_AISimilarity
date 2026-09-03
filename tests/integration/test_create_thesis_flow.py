@@ -59,7 +59,10 @@ def test_create_returns_detail_with_all_five_fields():
     assert data["similarities"] == []
 
 
-def test_create_returns_similarity_against_existing_topics():
+def test_create_returns_similarity_against_existing_topics(monkeypatch):
+    # SEDO structural-dup path (deterministic regardless of .env). The default running config uses the
+    # function-centric capability dimension, under which hotel-vs-pharmacy is NOT auto-flagged (ICTA §H).
+    monkeypatch.setattr("app.core.config.CAPABILITY_STRUCTURAL", False)
     client.post("/api/v1/theses", json=PAYLOAD)
     response = client.post("/api/v1/theses", json=_second_topic())
     assert response.status_code == 201
@@ -87,7 +90,8 @@ def test_missing_title_is_rejected():
     assert client.post("/api/v1/theses", json=payload).status_code == 422
 
 
-def test_explain_endpoint_returns_full_report():
+def test_explain_endpoint_returns_full_report(monkeypatch):
+    monkeypatch.setattr("app.core.config.CAPABILITY_STRUCTURAL", False)  # SEDO path (see note above)
     client.post("/api/v1/theses", json=PAYLOAD)
     client.post("/api/v1/theses", json=_second_topic())
     a, b = PAYLOAD["thesis_id"], _second_topic()["thesis_id"]

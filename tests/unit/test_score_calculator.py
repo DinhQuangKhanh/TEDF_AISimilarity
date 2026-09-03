@@ -53,14 +53,21 @@ def test_weights_are_a_valid_distribution():
     assert all(0.0 <= v <= 1.0 for v in WEIGHTS.values())
 
 
-def test_level_for_matches_table_3():
-    assert level_for(0.90) == "Critical"
-    assert level_for(0.85) == "Critical"
-    assert level_for(0.70) == "High"
-    assert level_for(0.65) == "High"
-    assert level_for(0.50) == "Moderate"
-    assert level_for(0.40) == "Moderate"
-    assert level_for(0.10) == "Low"
+def test_level_for_respects_configured_cuts():
+    # Cut points are calibrated on the ground truth by default (§3A) — test the mapping is
+    # consistent with whatever cuts are configured, not the paper's fixed 0.40/0.65/0.85.
+    from app.core import config
+    mod, high, crit = config.LEVEL_CUTS
+    assert level_for(crit) == "Critical"
+    assert level_for((high + crit) / 2) == "High"
+    assert level_for((mod + high) / 2) == "Moderate"
+    assert level_for(mod / 2) == "Low"
+
+
+def test_level_for_accepts_explicit_paper_cuts():
+    paper = ((0.85, "Critical"), (0.65, "High"), (0.40, "Moderate"), (0.0, "Low"))
+    assert level_for(0.70, paper) == "High"
+    assert level_for(0.90, paper) == "Critical"
 
 
 def test_action_for_matches_table_3():

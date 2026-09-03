@@ -311,16 +311,23 @@ def simplex_size(n_steps: int) -> int:
     return (n + 1) * (n + 2) * (n + 3) // 6
 
 
-def tune_weights(queries, matrix, n_steps=20):
+def tune_weights(queries, matrix, n_steps=20, observer=None):
     """Grid-search the simplex for the weights that best reproduce the teacher's LEVELS
     (paper's primary task): maximize level macro-F1, tie-break by AUC then level accuracy.
-    ``n_steps`` sets the resolution (1/step); default 20 = step 0.05."""
+    ``n_steps`` sets the resolution (1/step); default 20 = step 0.05.
+
+    ``observer(i, weights, metrics, improved)`` — optional callback fired for every grid point, so a
+    caller can watch the search happen (see ``tools/trace_tuning.py``). It never changes the result.
+    """
     best, best_key = None, None
-    for w in simplex(n_steps):
+    for i, w in enumerate(simplex(n_steps)):
         m = level_metrics(queries, matrix, w)
         key = (m["macro_f1"], m["auc"] or 0.0, m["level_accuracy"])
-        if best_key is None or key > best_key:
+        improved = best_key is None or key > best_key
+        if improved:
             best_key, best = key, w
+        if observer is not None:
+            observer(i, w, m, improved)
     return best
 
 
@@ -355,7 +362,14 @@ def sedo_coverage(theses) -> dict:
     return {"n": len(theses), "tech_or_method": round(tech_hits / n, 4), "domain": round(dom_hits / n, 4)}
 
 
-def main() -> None:
+def prepare_benchmark() -> tuple[list[dict], list[EvalThesis], list]:
+    """The one-time expensive part shared by every caller: load the corpus + the teacher's queries,
+    resolve each gold target back to a corpus row, fit the corpus-level models (TF-IDF, concept-IDF)
+    and score all queries × corpus pairs on the four dimensions.
+
+    Returns ``(queries, corpus, matrix)``. The weight search that follows only re-weights ``matrix``,
+    so it never needs to touch the encoder again.
+    """
     corpus = build_corpus()
     queries = load_queries()
     for row, q in enumerate(queries):
@@ -368,6 +382,11 @@ def main() -> None:
     lexical_model = build_lexical_scorer(corpus)
     concept_idf = sc.build_concept_idf(corpus)
     matrix = dims_matrix(queries, corpus, lexical_model, concept_idf)
+    return queries, corpus, matrix
+
+
+def main() -> None:
+    queries, corpus, matrix = prepare_benchmark()
 
     default_rank = ranking_metrics(queries, matrix, _DEFAULT_WEIGHTS)
     default_level = level_metrics(queries, matrix, _DEFAULT_WEIGHTS)
