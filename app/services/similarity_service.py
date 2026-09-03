@@ -20,7 +20,7 @@ def serialize_similarity(row) -> dict:
         "overall_score": row.overall_score,
         "level": row.level,
         "action": action_for(row.level),
-        "is_structural_duplication": is_structural_duplication(row.structure_score, row.domain_score),
+        "is_structural_duplication": is_structural_duplication(row.structure_score, row.domain_score, row.overall_score),
         "reason": json.loads(row.reason) if row.reason else [],
     }
 

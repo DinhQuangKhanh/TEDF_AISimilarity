@@ -13,28 +13,35 @@ Response shape::
                {"text": "waterway", "angle": "lexical"}],
          "b": [{"text": "...manage users, services, appointments...", "angle": "semantic"},
                {"text": "waterway", "angle": "lexical"}]},
-        {"field": "technologies", "angle": "structural", "score": 1.0,
-         "a": [{"text": "react", "angle": "structural"}, {"text": "sql server", "angle": "structural"}],
-         "b": [{"text": "react", "angle": "structural"}, {"text": "sql server", "angle": "structural"}]}
+        {"field": "objectives", "angle": "structural", "score": 0.71,
+         "a": [{"text": "real time tracking", "angle": "structural"}],
+         "b": [{"text": "gps tracking", "angle": "structural"}]}
     ]}
 
+The ``technologies`` field is never present: the structural dimension reads core functions, not the
+tech stack, so React/.NET are never painted as "structural" (see ``_TEXT_FIELDS`` below).
+
 Angles: ``semantic`` (best SBERT sentence pair WITHIN the field) · ``lexical`` (distinctive shared
-terms, ranked by corpus IDF) · ``structural`` (shared SEDO tech / methodology / task concepts) ·
-``domain`` (shared SEDO business-domain concepts). ``field`` uses the frontend FieldKey so the UI
-needs no translation. A field with no meaningful overlap is omitted (the UI leaves it plain).
+terms, ranked by corpus IDF) · ``structural`` (shared distinctive CORE FUNCTIONS — capability, e.g.
+booking/matching/ocr — **not** technology) · ``domain`` (shared SEDO business-domain concepts).
+``field`` uses the frontend FieldKey so the UI needs no translation. A field with no meaningful
+overlap is omitted (the UI leaves it plain).
+
+Kept in sync with scoring: the structural DIMENSION reads core functions (capability), not the tech
+stack, so the highlight paints functions too — never React/.NET as "structural" (ICTA §H).
 """
 
 from __future__ import annotations
 
 import re
 
+from app.core import config
 from app.ontology.sedo import get_sedo
+from app.services import capability
 from app.services.preprocessing import preprocess
 from app.services.semantic_encoder import semantic_similarity
-from app.utils.score_calculator import jaccard
 from app.utils.text_cleaner import normalize_key
 
-_STRUCT_LAYERS = {"TechnicalStack", "Methodology", "TaskType"}
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+|\n+|;\s*")
 _SENTENCE_MIN = 25            # ignore fragments shorter than this (except title)
 _SENTENCE_CAP = 8            # cap sentences per field to keep the SBERT grid small
@@ -80,10 +87,6 @@ def _field_text(topic, attr: str) -> str:
     return (getattr(topic, attr, None) or "").strip()
 
 
-def _tech_text(topic) -> str:
-    return ", ".join(t.name for t in getattr(topic, "technologies", []) if getattr(t, "name", None))
-
-
 def _sentences(text: str, *, allow_short: bool) -> list[str]:
     """Sentences within one field's text (so a highlighted passage never crosses a field boundary)."""
     out: list[str] = []
@@ -126,31 +129,41 @@ def _distinctive_terms(a_text: str, b_text: str, lexical_model, top_k: int = _TE
     return candidates[:top_k]
 
 
-def _shared_concept_surfaces(a_text: str, b_text: str) -> tuple[dict, dict]:
-    """(struct, domain) surface forms of the SEDO concepts shared by both texts, present on each side."""
+def _sedo_surfaces(a_text: str, b_text: str, layers) -> dict:
+    """Surface forms of the SEDO concepts (in ``layers``) shared by both texts, present on each side."""
     sedo = get_sedo()
     shared = sedo.recognize(a_text) & sedo.recognize(b_text)
     a_norm = f" {normalize_key(a_text)} "
     b_norm = f" {normalize_key(b_text)} "
-    struct = {"a": [], "b": []}
-    domain = {"a": [], "b": []}
+    out = {"a": [], "b": []}
     for concept in shared:
-        node = sedo.nodes[concept]
-        if node["layer"] in _STRUCT_LAYERS:
-            bucket = struct
-        elif node["layer"] == "DomainEntity":
-            bucket = domain
-        else:
+        if sedo.nodes[concept]["layer"] not in layers:
             continue
-        for keyword in node["keywords"]:
+        for keyword in sedo.nodes[concept]["keywords"]:
             key = normalize_key(keyword)
             if not key:
                 continue
-            if f" {key} " in a_norm and keyword not in bucket["a"]:
-                bucket["a"].append(keyword)
-            if f" {key} " in b_norm and keyword not in bucket["b"]:
-                bucket["b"].append(keyword)
-    return struct, domain
+            if f" {key} " in a_norm and keyword not in out["a"]:
+                out["a"].append(keyword)
+            if f" {key} " in b_norm and keyword not in out["b"]:
+                out["b"].append(keyword)
+    return out
+
+
+def _shared_domain_surfaces(a_text: str, b_text: str) -> dict:
+    """Shared business-DOMAIN surfaces (SEDO DomainEntity) — the domain angle."""
+    return _sedo_surfaces(a_text, b_text, {"DomainEntity"})
+
+
+def _shared_structural_surfaces(a_text: str, b_text: str, stop=None) -> dict:
+    """Structural evidence = shared DISTINCTIVE core functions (capability) — NOT technology. ``stop``
+    is the corpus stoplist so highlights match the score per pool. Falls back to SEDO structural
+    layers when the capability dimension is off, matching how the score runs."""
+    if config.CAPABILITY_STRUCTURAL:
+        shared = capability.distinctive(a_text, stop) & capability.distinctive(b_text, stop)
+        return {"a": capability.matched_surfaces(a_text, shared),
+                "b": capability.matched_surfaces(b_text, shared)}
+    return _sedo_surfaces(a_text, b_text, config.STRUCT_LAYERS)
 
 
 def _dedupe(spans: list[dict]) -> list[dict]:
@@ -166,7 +179,7 @@ def _dedupe(spans: list[dict]) -> list[dict]:
     return out
 
 
-def _text_field_alignment(field_key: str, a_text: str, b_text: str, lexical_model, *, allow_short: bool):
+def _text_field_alignment(field_key: str, a_text: str, b_text: str, lexical_model, *, allow_short: bool, stop=None):
     """Assemble one text field's overlap: semantic passage + concepts + distinctive terms."""
     if not a_text or not b_text:
         return None
@@ -183,8 +196,9 @@ def _text_field_alignment(field_key: str, a_text: str, b_text: str, lexical_mode
         b_spans.append({"text": pair[1], "angle": "semantic"})
         angle, score = "semantic", round(pair[2], 4)
 
-    # 2) shared SEDO concepts (domain then structural)
-    struct, domain = _shared_concept_surfaces(a_text, b_text)
+    # 2) shared concepts: domain (SEDO) + structural (shared distinctive core FUNCTIONS, not tech)
+    domain = _shared_domain_surfaces(a_text, b_text)
+    struct = _shared_structural_surfaces(a_text, b_text, stop)
     for surf in domain["a"]:
         a_spans.append({"text": surf, "angle": "domain"})
     for surf in domain["b"]:
@@ -214,34 +228,21 @@ def _text_field_alignment(field_key: str, a_text: str, b_text: str, lexical_mode
     return {"field": field_key, "angle": angle, "score": score, "a": a_spans, "b": b_spans}
 
 
-def _tech_alignment(query, match):
-    """Technologies field: shared tech/method/task concepts (structural angle), scored by Jaccard."""
-    a_text, b_text = _tech_text(query), _tech_text(match)
-    if not a_text or not b_text:
-        return None
-    struct, _domain = _shared_concept_surfaces(a_text, b_text)
-    a_spans = _dedupe([{"text": s, "angle": "structural"} for s in struct["a"]])
-    b_spans = _dedupe([{"text": s, "angle": "structural"} for s in struct["b"]])
-    if not a_spans or not b_spans:
-        return None
-    sedo = get_sedo()
-    ca = {c for c in sedo.recognize(a_text) if sedo.nodes[c]["layer"] in _STRUCT_LAYERS}
-    cb = {c for c in sedo.recognize(b_text) if sedo.nodes[c]["layer"] in _STRUCT_LAYERS}
-    return {"field": "technologies", "angle": "structural", "score": round(jaccard(ca, cb), 4),
-            "a": a_spans, "b": b_spans}
+def compute_highlights(query, match, lexical_model=None, capability_model=None) -> dict:
+    """Field-aligned highlight map for one (query, match) pair; fields with no overlap are omitted.
 
-
-def compute_highlights(query, match, lexical_model=None) -> dict:
-    """Field-aligned highlight map for one (query, match) pair; fields with no overlap are omitted."""
+    The ``technologies`` field is deliberately NOT highlighted: the structural dimension no longer
+    scores on the tech stack, so painting React/.NET as "structural" would misrepresent the score.
+    ``capability_model`` (from ``build_capability_model``) makes the structural spans use the SAME
+    corpus stoplist as the score; omit it and a static platform-function fallback is used.
+    """
+    stop = capability_model.get("stop") if capability_model else None
     fields: list[dict] = []
     for attr, field_key in _TEXT_FIELDS:
         alignment = _text_field_alignment(
             field_key, _field_text(query, attr), _field_text(match, attr),
-            lexical_model, allow_short=(attr == "title"),
+            lexical_model, allow_short=(attr == "title"), stop=stop,
         )
         if alignment:
             fields.append(alignment)
-    tech = _tech_alignment(query, match)
-    if tech:
-        fields.append(tech)
     return {"fields": fields}

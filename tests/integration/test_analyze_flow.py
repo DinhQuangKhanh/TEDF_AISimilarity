@@ -8,6 +8,9 @@ from app.main import app
 
 client = TestClient(app)
 
+# The demo trace is the feature under test here: eight named steps, in this order.
+_STEP_IDS = ["input", "preprocess", "sedo", "semantic", "corpus", "scoring", "mddm", "decision"]
+
 
 def setup_function():
     Base.metadata.drop_all(bind=engine)
@@ -31,7 +34,7 @@ def test_analyze_uses_recent_capstone_corpus_dbfree():
     assert resp.status_code == 200
     data = resp.json()["data"]
 
-    assert [s["id"] for s in data["steps"]] == ["preprocess", "semantic", "corpus", "scoring", "mddm"]
+    assert [s["id"] for s in data["steps"]] == _STEP_IDS
     assert data["corpusSize"] == 53                         # SP26 (40) + SU26 (13)
     assert 1 <= len(data["topMatches"]) <= 5
     top = data["topMatches"][0]
@@ -61,15 +64,45 @@ def test_analyze_title_only_topic_still_works():
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert data["corpusSize"] == 53
-    assert [s["id"] for s in data["steps"]] == ["preprocess", "semantic", "corpus", "scoring", "mddm"]
+    assert [s["id"] for s in data["steps"]] == _STEP_IDS
 
 
 def test_analyze_empty_title_is_error_step():
     resp = client.post("/api/v1/similarity/analyze", json={"title": "   "})
     assert resp.status_code == 200
     data = resp.json()["data"]
-    assert data["steps"][0]["id"] == "preprocess"
+    assert data["steps"][0]["id"] == "input"
     assert data["steps"][0]["status"] == "error"
+
+
+def test_every_step_carries_an_input_output_pair():
+    """The demo's whole point is that each step is inspectable — a step with no output would
+    render as an empty card."""
+    resp = client.post("/api/v1/similarity/analyze",
+                       json={"title": "Hotel Management System using React and Node.js"})
+    steps = resp.json()["data"]["steps"]
+    assert len(steps) == len(_STEP_IDS)
+    for step in steps:
+        assert step["output"], f"step {step['id']} has no output"
+        assert step["detail"], f"step {step['id']} has no explanation"
+    # the fusion step must show the arithmetic, not just the total
+    mddm = next(s for s in steps if s["id"] == "mddm")
+    terms = mddm["output"]["terms"]
+    assert [t["dim"] for t in terms] == ["semantic", "lexical", "structure", "domain"]
+    assert abs(sum(t["product"] for t in terms) - mddm["output"]["overall"]) < 1e-3
+
+
+def test_model_info_reports_weights_and_their_source():
+    data = client.get("/api/v1/similarity/model-info").json()["data"]
+    assert set(data["weights"]) == {"semantic", "lexical", "structure", "domain"}
+    assert abs(sum(data["weights"].values()) - 1.0) < 1e-6
+    assert data["weightsSource"]
+    assert [t["level"] for t in data["levelThresholds"]] == ["Critical", "High", "Moderate", "Low"]
+    assert set(data["backends"]) == {"semantic", "lexical"}
+    # the grid-search log is optional (only present after tools/trace_tuning.py has run)
+    if data["tuning"] is not None:
+        assert data["tuning"]["gridPoints"] > 0
+        assert data["tuning"]["leaderboard"][0]["rank"] == 1
 
 
 def test_demo_page_is_served():

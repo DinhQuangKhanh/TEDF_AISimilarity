@@ -39,9 +39,23 @@ def _corpus_lexical_model():
     return build_lexical_scorer(corpus) if corpus else None
 
 
+@lru_cache(maxsize=1)
+def _corpus_capability_model():
+    """Same corpus capability model the score uses, so structural spans drop the SAME ubiquitous
+    platform functions (per pool) instead of a static guess. None when capability is off."""
+    from app.core import config
+    if not config.CAPABILITY_STRUCTURAL:
+        return None
+    from app.services.corpus_loader import load_recent_capstone_corpus
+    from app.utils.score_calculator import build_capability_model
+
+    corpus = load_recent_capstone_corpus()
+    return build_capability_model(corpus) if corpus else None
+
+
 def build_field_evidence(query, match) -> list[dict]:
     """For each overlapping field, distil the highlight spans into compact evidence for one field."""
-    highlights = compute_highlights(query, match, _corpus_lexical_model())
+    highlights = compute_highlights(query, match, _corpus_lexical_model(), _corpus_capability_model())
     evidence: list[dict] = []
     for field in highlights.get("fields", []):
         a_spans = field.get("a", [])
@@ -71,7 +85,7 @@ def _template_explanation(ev: dict) -> str:
         return (f"Hai đề tài trình bày phần {label} gần giống nhau (tương đồng ngữ nghĩa ~{pct}); "
                 f"đoạn trùng rõ nhất: «{_clip(ev['a'])}» ↔ «{_clip(ev['b'])}».")
     if ev["concepts"] and ev["angle"] == "structural":
-        return f"Phần {label} trùng ở công nghệ/kiểu triển khai: {', '.join(ev['concepts'])}."
+        return f"Phần {label} trùng ở các chức năng cốt lõi: {', '.join(ev['concepts'])}."
     if ev["concepts"] and ev["angle"] == "domain":
         return f"Phần {label} cùng lĩnh vực nghiệp vụ: {', '.join(ev['concepts'])}."
     if ev["concepts"]:
@@ -92,7 +106,7 @@ def _prompt(evidence: list[dict]) -> str:
     return (
         "Bạn là trợ lý thẩm định đồ án tốt nghiệp. Dưới đây là BẰNG CHỨNG trùng lặp giữa hai đề tài theo từng "
         "hạng mục: 'a' và 'b' là đoạn văn giống nhau nhất ở hai bên, 'terms' là thuật ngữ chung, 'concepts' là "
-        "công nghệ/lĩnh vực chung, 'score' là mức tương đồng.\n"
+        "chức năng cốt lõi/lĩnh vực chung, 'score' là mức tương đồng.\n"
         "Với MỖI hạng mục, viết 1–2 câu tiếng Việt giải thích VÌ SAO hai đề tài trùng ở hạng mục đó, "
         "CHỈ dựa vào bằng chứng cho sẵn, TUYỆT ĐỐI KHÔNG bịa thêm thông tin ngoài bằng chứng.\n"
         f"Trả về DUY NHẤT một JSON object dạng {{\"<field>\": \"<giải thích>\"}} với đúng các field: {fields}. "

@@ -57,9 +57,14 @@ def test_composite(case):
     assert value == pytest.approx(case["expected"], abs=case["tol"])
 
 
+# The paper's Table 3 cut points, passed explicitly so this verifies the FORMULA/mapping regardless
+# of the deployed cuts (deployment calibrates them on the ground truth — a deployment choice, §3A).
+_PAPER_LEVELS = ((0.85, "Critical"), (0.65, "High"), (0.40, "Moderate"), (0.0, "Low"))
+
+
 @pytest.mark.parametrize("case", DATA["levels"], ids=_id)
 def test_levels(case):
-    level = level_for(case["score"])
+    level = level_for(case["score"], _PAPER_LEVELS)
     assert level == case["level"]
     assert action_for(level) == case["action"]
 

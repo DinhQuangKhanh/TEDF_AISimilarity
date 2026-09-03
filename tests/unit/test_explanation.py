@@ -44,12 +44,13 @@ def test_report_no_longer_carries_revision_suggestion():
 
 
 # ── structural duplication (paper's canonical case) ─────────────────────────────────
-def test_structural_duplication_names_shared_stack():
+def test_structural_duplication_names_shared_functions():
     rep = build_explanation(_HOTEL, _PHARMACY, _scores(0.4, 0.5, 0.98, 0.20, 0.55, "Moderate"))
     assert rep["is_structural_duplication"] is True
-    assert set(rep["shared_concepts"]["tech"]) == {"React", "Node.js"}
     assert rep["shared_concepts"]["domain"] == []  # hotel vs pharmacy do NOT share a domain
-    assert "same tech stack with a different business domain" in rep["reasons"]
+    # structural is now about FUNCTIONS, not the tech stack (tech kept only as informational)
+    assert "same core functions with a different business domain" in rep["reasons"]
+    assert "function" in rep["shared_concepts"]
 
 
 def test_structural_reason_not_contradictory():
